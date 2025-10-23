@@ -1,7 +1,7 @@
 // src/gptMapa.js
 import fs from "node:fs"
 
-import { ensureOpenAIClient } from "./openaiProvider.js"
+import { ensureOpenAIClient, invalidateOpenAIClient } from "./openaiProvider.js"
 import {
   SYSTEM_EXTRACAO_COTACOES,
   USER_EXTRACAO_COTACOES,
@@ -13,12 +13,12 @@ import {
 import { extractCotacaoFromPdf } from "./gptExtracts.js"
 
 function requireClient() {
-  console.log("[v0] requireClient called")
+  console.log("[v0] requireClient: Verificando cliente OpenAI...")
   const client = ensureOpenAIClient()
-  console.log("[v0] Client obtained:", !!client)
+  console.log("[v0] requireClient: Cliente obtido:", !!client)
 
   if (!client) {
-    const error = new Error("OpenAI API key ausente ou inválida")
+    const error = new Error("❌ OpenAI API key ausente ou inválida. Adicione OPENAI_API_KEY na seção 'Vars' do v0.")
     console.error("[v0] requireClient error:", error.message)
     throw error
   }
@@ -168,17 +168,22 @@ function avaliarPropostas(propostas = []) {
 
 async function runExtracaoCotacoes(client, promptText, attachments) {
   const content = buildUserContent(promptText, attachments)
-  const resp = await client.responses.create({
+
+  console.log("[v0] Calling OpenAI API for extraction...")
+
+  const resp = await client.chat.completions.create({
     model: "gpt-4o-mini",
-    input: [
+    messages: [
       { role: "system", content: SYSTEM_EXTRACAO_COTACOES },
-      { role: "user", content: content },
+      { role: "user", content: typeof content === "string" ? content : JSON.stringify(content) },
     ],
     temperature: 0.1,
     response_format: { type: "json_schema", json_schema: EXTRACAO_SCHEMA },
   })
 
-  const raw = resp?.output_text || "{}"
+  const raw = resp?.choices?.[0]?.message?.content || "{}"
+  console.log("[v0] OpenAI response received, parsing...")
+
   try {
     return JSON.parse(raw)
   } catch {
@@ -202,7 +207,8 @@ async function runExtracaoCotacoes(client, promptText, attachments) {
  * @returns {Promise<{propostas: Array, objeto_rascunho: string|null, avisos: string[]}>}
  */
 export async function extrairCotacoesDeTexto(params, options = {}) {
-  console.log("[v0] extrairCotacoesDeTexto called with params:", {
+  console.log("[v0] extrairCotacoesDeTexto iniciado")
+  console.log("[v0] Parâmetros:", {
     instituicao: params?.instituicao,
     codigo_projeto: params?.codigo_projeto,
     rubrica: params?.rubrica,
@@ -210,8 +216,14 @@ export async function extrairCotacoesDeTexto(params, options = {}) {
     cotacoes_arquivos_count: params?.cotacoes_arquivos?.length || 0,
   })
 
-  const client = requireClient()
-  console.log("[v0] Client ready for extraction")
+  let client
+  try {
+    client = requireClient()
+    console.log("[v0] ✓ Cliente OpenAI pronto para extração")
+  } catch (err) {
+    console.error("[v0] ❌ Erro ao obter cliente OpenAI:", err.message)
+    throw err
+  }
 
   const arquivos = Array.isArray(params?.cotacoes_arquivos) ? params.cotacoes_arquivos : []
   const anexos = await uploadCotacaoFiles(client, arquivos)
@@ -226,6 +238,8 @@ export async function extrairCotacoesDeTexto(params, options = {}) {
   try {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const tentativaNumero = attempt + 1
+      console.log(`[v0] Tentativa ${tentativaNumero}/${maxAttempts}`)
+
       const prompt =
         attempt === 0
           ? USER_EXTRACAO_COTACOES(params)
@@ -239,8 +253,20 @@ export async function extrairCotacoesDeTexto(params, options = {}) {
       let json
       try {
         json = await runExtracaoCotacoes(client, prompt, attachments)
+        console.log(`[v0] ✓ Tentativa ${tentativaNumero} concluída com sucesso`)
       } catch (err) {
-        const msg = `Falha na leitura das cotações (tentativa ${tentativaNumero}): ${err?.message || err}`
+        let errorMsg = err?.message || String(err)
+
+        if (errorMsg.includes("401") || errorMsg.includes("Incorrect API key")) {
+          errorMsg = `❌ Chave da OpenAI inválida ou expirada (erro 401). Verifique a chave na seção 'Vars' do v0.`
+          console.error("[v0]", errorMsg)
+          invalidateOpenAIClient()
+        } else if (errorMsg.includes("400")) {
+          errorMsg = `❌ Erro na requisição OpenAI (erro 400): ${errorMsg}`
+          console.error("[v0]", errorMsg)
+        }
+
+        const msg = `Falha na leitura das cotações (tentativa ${tentativaNumero}): ${errorMsg}`
         avisosSet.add(msg)
         tentativas.push({
           tentativa: tentativaNumero,
@@ -249,7 +275,9 @@ export async function extrairCotacoesDeTexto(params, options = {}) {
           pendencias: [msg],
           erro: true,
         })
+
         if (attempt + 1 >= maxAttempts) {
+          console.error(`[v0] ❌ Todas as ${maxAttempts} tentativas falharam`)
           break
         }
         continue
@@ -278,6 +306,7 @@ export async function extrairCotacoesDeTexto(params, options = {}) {
       })
 
       if (avaliacao.complete) {
+        console.log(`[v0] ✓ Extração completa na tentativa ${tentativaNumero}`)
         break
       }
     }
@@ -321,7 +350,8 @@ export async function extrairCotacoesDeTexto(params, options = {}) {
  * @returns {Promise<{objeto: string, justificativa: string}>}
  */
 export async function gerarObjetoEJustificativa(params) {
-  console.log("[v0] gerarObjetoEJustificativa called with params:", {
+  console.log("[v0] gerarObjetoEJustificativa iniciado")
+  console.log("[v0] Parâmetros:", {
     instituicao: params?.instituicao,
     projeto: params?.projeto,
     rubrica: params?.rubrica,
@@ -329,13 +359,21 @@ export async function gerarObjetoEJustificativa(params) {
   })
 
   const userPrompt = USER_GERACAO_TEXTO(params)
-  const client = requireClient()
 
-  console.log("[v0] Calling OpenAI for objeto e justificativa")
+  let client
+  try {
+    client = requireClient()
+    console.log("[v0] ✓ Cliente OpenAI pronto")
+  } catch (err) {
+    console.error("[v0] ❌ Erro ao obter cliente OpenAI:", err.message)
+    throw err
+  }
 
-  const resp = await client.responses.create({
+  console.log("[v0] Chamando OpenAI para gerar objeto e justificativa...")
+
+  const resp = await client.chat.completions.create({
     model: "gpt-4o",
-    input: [
+    messages: [
       { role: "system", content: SYSTEM_GERACAO_TEXTO },
       { role: "user", content: userPrompt },
     ],
@@ -357,7 +395,9 @@ export async function gerarObjetoEJustificativa(params) {
     },
   })
 
-  const raw = resp.output_text || "{}"
+  const raw = resp?.choices?.[0]?.message?.content || "{}"
+  console.log("[v0] ✓ Resposta recebida, processando...")
+
   let json
   try {
     json = JSON.parse(raw)
@@ -388,9 +428,9 @@ export async function buildPropostas(openai, cotacoesPaths = []) {
   }
 
   if (openai) {
-    const res = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
+    const res = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
         { role: "system", content: PROMPT_CONSOLIDA_PROPOSTAS.system },
         {
           role: "user",
@@ -423,7 +463,7 @@ export async function buildPropostas(openai, cotacoesPaths = []) {
         },
       },
     })
-    const out = JSON.parse(res.output_text ?? "{}")
+    const out = JSON.parse(res?.choices?.[0]?.message?.content ?? "{}")
     if (Array.isArray(out?.propostas) && out.propostas.length) {
       return out.propostas
     }
