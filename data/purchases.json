@@ -1,5 +1,5 @@
-{
-  "1": [
+[
+  [
     {
       "id": "ee21myeqpy9",
       "favorecido": "BIDMAX SOLUCOES CORPORATIVAS LTDA",
@@ -136,7 +136,7 @@
       ]
     }
   ],
-  "1759149011623": [
+  [
     {
       "id": "voa8eyv9uc",
       "favorecido": "BIDMAX SOLUCOES CORPORATIVAS LTDA",
@@ -159,7 +159,7 @@
       ]
     }
   ],
-  "1759152634110": [
+  [
     {
       "id": "3v1cr47cuzi",
       "favorecido": "BIDMAX SOLUCOES CORPORATIVAS LTDA",
@@ -203,7 +203,7 @@
       ]
     }
   ],
-  "1759174577339": [
+  [
     {
       "id": "xk5fo0c3aya",
       "favorecido": "BIDMAX SOLUCOES CORPORATIVAS LTDA",
@@ -491,7 +491,7 @@
       }
     }
   ],
-  "1759510457044": [
+  [
     {
       "id": "pfhvdlsvyv8",
       "favorecido": "BIDMAX SOLUCOES CORPORATIVAS LTDA",
@@ -679,5 +679,228 @@
         }
       }
     }
-  ]
-}
+  ],
+  {
+    "favorecido": "BIDMAX SOLUCOES CORPORATIVAS LTDA",
+    "cnpj": "43.202.033/0001-27",
+    "pcNumero": "3ª PC",
+    "dataTitulo": "2025-05-27",
+    "nf": "000.000.123",
+    "nExtrato": "71.501",
+    "dataPagamento": "2025-07-15",
+    "valor": 180576,
+    "rubrica": "Materiais de consumo",
+    "mesLabel": "Jul/2025",
+    "mesAno": "07/2025",
+    "just": "JUSTIFICATIVA: Esta solicitação refere-se à compra de notebooks destinados aos novos alunos da próxima turma do Edge Academy",
+    "docs": {
+      "nf": {
+        "url": "",
+        "originalname": "nfe teste.pdf",
+        "mimetype": "application/pdf",
+        "size": 514131,
+        "filename": ""
+      },
+      "oficio": {
+        "url": "",
+        "originalname": "oficio solicitacao teste.pdf",
+        "mimetype": "application/pdf",
+        "size": 153798,
+        "filename": ""
+      },
+      "ordem": null,
+      "ordem_fornecimento": null,
+      "comprovante": {
+        "url": "",
+        "originalname": "comprovante teste_page-0001.jpg",
+        "mimetype": "image/jpeg",
+        "size": 387893,
+        "filename": ""
+      },
+      "folhaAssinada": null,
+      "decisaoAssinada": null,
+      "cotacoes": [
+        {
+          "url": "",
+          "originalname": "cotacao 1.pdf",
+          "mimetype": "application/pdf",
+          "size": 340224,
+          "filename": ""
+        },
+        {
+          "url": "",
+          "originalname": "cotacao 2.pdf",
+          "mimetype": "application/pdf",
+          "size": 6189196,
+          "filename": ""
+        },
+        {
+          "url": "",
+          "originalname": "cotacao 3.pdf",
+          "mimetype": "application/pdf",
+          "size": 1384585,
+          "filename": ""
+        }
+      ]
+    },
+    "objeto": "",
+    "cotacaoObjeto": "",
+    "cotacoes_objeto": "",
+    "objetoDescricao": "",
+    "propostas": [],
+    "cotacoes_propostas": [],
+    "id": "fn9bpl29stn",
+    "projectId": "1759510456721",
+    "data_titulo": "2025-05-27",
+    "data_emissao_iso": "2025-05-27",
+    "data_emissao": "2025-05-27",
+    "nf_recibo": "000.000.123",
+    "nf_num": "000.000.123",
+    "nf_num_mask": "000.000.123",
+    "nf_num_9": "000.000.123",
+    "nf_num_9_mask": "000.000.123",
+    "nf_mask": "000.000.123",
+    "justificativa": "JUSTIFICATIVA: Esta solicitação refere-se à compra de notebooks destinados aos novos alunos da próxima turma do Edge Academy",
+    "justificativa_para_compra": "JUSTIFICATIVA: Esta solicitação refere-se à compra de notebooks destinados aos novos alunos da próxima turma do Edge Academy",
+    "numero_extrato": "71.501",
+    "data_pagamento": "2025-07-15",
+    "valor_pago": 180576,
+    "valorPago": 180576,
+    "valor_pago_num": 180576,
+    "tipo_rubrica": "Materiais de consumo",
+    "tipoRubrica": "Materiais de consumo",
+    "mes_ano": "07/2025",
+    "cotacoesAvisos": [
+      "Falha na leitura das cotações (tentativa 1): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 2): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 3): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'."
+    ],
+    "cotacoes_avisos": [
+      "Falha na leitura das cotações (tentativa 1): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 2): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 3): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'."
+    ]
+  },
+  {
+    "favorecido": "BIDMAX SOLUCOES CORPORATIVAS LTDA",
+    "cnpj": "43.202.033/0001-27",
+    "pcNumero": "3ª PC",
+    "dataTitulo": "2025-05-27",
+    "nf": "000.000.123",
+    "nExtrato": "71.501",
+    "dataPagamento": "2025-07-15",
+    "valor": 180576,
+    "rubrica": "Materiais de consumo",
+    "mesLabel": "Jul/2025",
+    "mesAno": "07/2025",
+    "just": "JUSTIFICATIVA: Esta solicitação refere-se à compra de notebooks destinados aos novos alunos da próxima turma do Edge Academy",
+    "docs": {
+      "nf": null,
+      "oficio": null,
+      "ordem": null,
+      "ordem_fornecimento": null,
+      "comprovante": null,
+      "folhaAssinada": null,
+      "decisaoAssinada": null,
+      "cotacoes": []
+    },
+    "objeto": "",
+    "cotacaoObjeto": "",
+    "cotacoes_objeto": "",
+    "objetoDescricao": "",
+    "propostas": [],
+    "cotacoes_propostas": [],
+    "id": "08qdiq9y4ky4",
+    "projectId": "1759510456721",
+    "data_titulo": "2025-05-27",
+    "data_emissao_iso": "2025-05-27",
+    "data_emissao": "2025-05-27",
+    "nf_recibo": "000.000.123",
+    "nf_num": "000.000.123",
+    "nf_num_mask": "000.000.123",
+    "nf_num_9": "000.000.123",
+    "nf_num_9_mask": "000.000.123",
+    "nf_mask": "000.000.123",
+    "justificativa": "JUSTIFICATIVA: Esta solicitação refere-se à compra de notebooks destinados aos novos alunos da próxima turma do Edge Academy",
+    "justificativa_para_compra": "JUSTIFICATIVA: Esta solicitação refere-se à compra de notebooks destinados aos novos alunos da próxima turma do Edge Academy",
+    "numero_extrato": "71.501",
+    "data_pagamento": "2025-07-15",
+    "valor_pago": 180576,
+    "valorPago": 180576,
+    "valor_pago_num": 180576,
+    "tipo_rubrica": "Materiais de consumo",
+    "tipoRubrica": "Materiais de consumo",
+    "mes_ano": "07/2025",
+    "cotacoesAvisos": [
+      "Falha na leitura das cotações (tentativa 1): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 2): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 3): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'."
+    ],
+    "cotacoes_avisos": [
+      "Falha na leitura das cotações (tentativa 1): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 2): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 3): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'."
+    ]
+  },
+  {
+    "favorecido": "BIDMAX SOLUCOES CORPORATIVAS LTDA",
+    "cnpj": "43.202.033/0001-27",
+    "pcNumero": "3ª PC",
+    "dataTitulo": "2025-06-30",
+    "nf": "000.000.123",
+    "nExtrato": "71.501",
+    "dataPagamento": "2025-07-15",
+    "valor": 180576,
+    "rubrica": "Materiais de consumo",
+    "mesLabel": "Jul/2025",
+    "mesAno": "07/2025",
+    "just": "Agradecemos a oportunidade! O documento a seguir apresenta nossa proposta comercial e reiteremos o desejo de nos estabelecer como um verdadeiro parceiro de negócio para vossa empresa.",
+    "docs": {
+      "nf": null,
+      "oficio": null,
+      "ordem": null,
+      "ordem_fornecimento": null,
+      "comprovante": null,
+      "folhaAssinada": null,
+      "decisaoAssinada": null,
+      "cotacoes": []
+    },
+    "objeto": "",
+    "cotacaoObjeto": "",
+    "cotacoes_objeto": "",
+    "objetoDescricao": "",
+    "propostas": [],
+    "cotacoes_propostas": [],
+    "id": "jofk3mq287m",
+    "projectId": "1759510456721",
+    "data_titulo": "2025-06-30",
+    "data_emissao_iso": "2025-06-30",
+    "data_emissao": "2025-06-30",
+    "nf_recibo": "000.000.123",
+    "nf_num": "000.000.123",
+    "nf_num_mask": "000.000.123",
+    "nf_num_9": "000.000.123",
+    "nf_num_9_mask": "000.000.123",
+    "nf_mask": "000.000.123",
+    "justificativa": "Agradecemos a oportunidade! O documento a seguir apresenta nossa proposta comercial e reiteremos o desejo de nos estabelecer como um verdadeiro parceiro de negócio para vossa empresa.",
+    "justificativa_para_compra": "Agradecemos a oportunidade! O documento a seguir apresenta nossa proposta comercial e reiteremos o desejo de nos estabelecer como um verdadeiro parceiro de negócio para vossa empresa.",
+    "numero_extrato": "71.501",
+    "data_pagamento": "2025-07-15",
+    "valor_pago": 180576,
+    "valorPago": 180576,
+    "valor_pago_num": 180576,
+    "tipo_rubrica": "Materiais de consumo",
+    "tipoRubrica": "Materiais de consumo",
+    "mes_ano": "07/2025",
+    "cotacoesAvisos": [
+      "Falha na leitura das cotações (tentativa 1): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 2): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 3): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'."
+    ],
+    "cotacoes_avisos": [
+      "Falha na leitura das cotações (tentativa 1): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 2): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'.",
+      "Falha na leitura das cotações (tentativa 3): ❌ Erro na requisição OpenAI (erro 400): 400 Invalid schema for response_format 'cotacao_mapa': In context=('properties', 'propostas', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'observacao'."
+    ]
+  }
+]
