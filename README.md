@@ -28,3 +28,89 @@ Continue building your app on:
 2. Deploy your chats from the v0 interface
 3. Changes are automatically pushed to this repository
 4. Vercel deploys the latest version from this repository
+
+---
+
+## ⚠️ Configuração Necessária: Templates de Documentos
+
+### Problema Atual
+
+O sistema está retornando erro **404 (Template não encontrado)** porque os arquivos `.docx` necessários não estão presentes no diretório `src/templates/`.
+
+### Solução Rápida
+
+1. **Verifique os templates ausentes:**
+   \`\`\`bash
+   npm run check-templates
+   \`\`\`
+
+2. **Adicione os arquivos .docx nas pastas corretas:**
+   - `src/templates/folha_rosto/` - Templates de Folha de Rosto
+   - `src/templates/mapa/` - Templates de Mapa de Cotação
+   - `src/templates/dispensa/` - Template de Justificativa
+
+3. **Consulte a documentação detalhada:**
+   - Leia `src/templates/README.md` para lista completa de templates
+   - Cada subpasta tem um README.md com especificações das variáveis
+
+### Templates Necessários
+
+#### Folha de Rosto (`src/templates/folha_rosto/`)
+- `folha_rosto_edge.docx`
+- `folha_rosto_vertex.docx`
+- `custos_incorridos_edge.docx`
+- `custos_incorridos_vertex.docx`
+
+#### Mapa de Cotação (`src/templates/mapa/`)
+- `mapa_edge.docx`
+- `mapa_vertex.docx`
+
+#### Justificativa (`src/templates/dispensa/`)
+- `justificativa_dispensa.docx`
+
+### Como Criar os Templates
+
+1. Crie um documento Word (.docx) com o layout desejado
+2. Insira variáveis usando a sintaxe `{nome_variavel}`
+3. Para loops (propostas), use a sintaxe do docxtemplater
+4. Salve na pasta correspondente com o nome exato
+
+**Documentação completa:** Consulte `src/templates/README.md` para lista de variáveis e estrutura de cada template.
+
+### Restauração de Backup
+
+Se você tinha os templates anteriormente e eles foram perdidos:
+- Restaure de um backup do projeto
+- Ou entre em contato com o administrador do sistema
+- Ou recrie os templates seguindo a documentação em `src/templates/`
+
+---
+
+## Scripts Disponíveis
+
+- `npm start` - Inicia o servidor de produção
+- `npm run dev` - Inicia o servidor de desenvolvimento
+- `npm run check-templates` - Verifica templates ausentes
+- `npm test` - Executa testes
+
+## Estrutura do Projeto
+
+\`\`\`
+wireframesoftexv0deploy/
+├── src/
+│   ├── templates/          # ⚠️ Templates .docx necessários
+│   │   ├── folha_rosto/
+│   │   ├── mapa/
+│   │   └── dispensa/
+│   ├── generateDocs.js     # Geração de documentos
+│   └── utils/
+├── public/
+│   └── docfin.js          # Frontend
+├── data/
+│   ├── uploads/           # Arquivos enviados
+│   ├── projects.json
+│   ├── purchases.json
+│   └── vendors.json
+├── scripts/
+│   └── check-templates.js # Script de verificação
+└── server.js              # Servidor Express
