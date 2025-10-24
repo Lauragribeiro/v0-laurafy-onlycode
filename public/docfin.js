@@ -2287,7 +2287,7 @@ document.addEventListener("DOMContentLoaded", () => {
 })
 
 /* ===================== FOLHA DE ROSTO E MAPA DE COTAÇÃO  ===================== */
-;() => {
+;(() => {
   // ---------- helpers básicos ----------
   function S(v) {
     return v == null ? "" : String(v)
@@ -3399,4 +3399,4 @@ document.addEventListener("DOMContentLoaded", () => {
   })
 
   console.log("[docfin] bloco de ações carregado.")
-}
+})() // Adicionando invocação da IIFE para executar o código
