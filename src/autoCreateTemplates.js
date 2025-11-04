@@ -57,17 +57,6 @@ function createFolhaRostoEdge() {
         properties: {},
         children: [
           new Paragraph({
-            text: "EDGE CAPITAL",
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 200 },
-          }),
-          new Paragraph({
-            text: "FOLHA DE ROSTO",
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 400 },
-          }),
-
-          new Paragraph({
             children: [new TextRun({ text: "Instituição Executora: " }), createPlaceholderText("instituicao")],
             spacing: { after: 200 },
           }),
