@@ -11,6 +11,7 @@ import { dirname, join, extname } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { renderDocxBuffer } from "./src/utils/docxTemplate.js"
+import { ensureTemplatesExist } from "./src/autoCreateTemplates.js"
 
 import dayjs from "dayjs"
 import "dayjs/locale/pt-br.js"
@@ -45,10 +46,55 @@ const useLegacyMapaRoute = process.env.LEGACY_MAPA === "1"
  *  Preparação de diretórios
  * ========================================================================== */
 async function ensureBaseDirs() {
+  console.log("[server] ========================================")
+  console.log("[server] Inicializando servidor...")
+  console.log("[server] ========================================")
+
   await fsp.mkdir(DATA_DIR, { recursive: true }).catch(() => {})
   await fsp.mkdir(UPLOADS_DIR, { recursive: true }).catch(() => {})
+
+  try {
+    console.log("[server] Verificando e criando templates...")
+    const created = await ensureTemplatesExist()
+
+    if (created > 0) {
+      console.log(`[server] ✅ ${created} template(s) criado(s) automaticamente`)
+    } else {
+      console.log("[server] ✓ Todos os templates já existem")
+    }
+
+    const criticalTemplates = [
+      join(TEMPLATE_BASE, "folha_rosto", "folha_rosto_edge.docx"),
+      join(TEMPLATE_BASE, "mapa", "mapa_edge.docx"),
+    ]
+
+    let allExist = true
+    for (const templatePath of criticalTemplates) {
+      if (!fs.existsSync(templatePath)) {
+        console.error(`[server] ❌ ERRO: Template crítico não encontrado: ${templatePath}`)
+        allExist = false
+      } else {
+        const stats = fs.statSync(templatePath)
+        console.log(`[server] ✓ Template existe: ${templatePath} (${stats.size} bytes)`)
+      }
+    }
+
+    if (!allExist) {
+      console.error("[server] ⚠️  ATENÇÃO: Alguns templates críticos não foram criados!")
+      console.error("[server] Execute manualmente: npm run create-templates")
+    }
+  } catch (error) {
+    console.error("[server] ❌ ERRO CRÍTICO ao verificar/criar templates:")
+    console.error("[server] Mensagem:", error.message)
+    console.error("[server] Stack:", error.stack)
+    console.error("[server] ⚠️  O servidor continuará, mas a geração de documentos pode falhar")
+  }
+
+  console.log("[server] ========================================")
 }
 await ensureBaseDirs()
+
+console.log("[server] TEMPLATE_BASE:", TEMPLATE_BASE)
 
 /* ========================================================================== *
  *  purchasesRouter (interno, à prova de falhas)
@@ -736,6 +782,10 @@ function normalizeProjectInput(body = {}) {
     instituicao: toStringSafe(body.instituicao ?? body.nomeInstituicao ?? ""),
     status: toStringSafe(body.status ?? ""),
     observacoes: toStringSafe(body.observacoes ?? body.obs ?? ""),
+    cnpj: toStringSafe(body.cnpj ?? body.cnpjInstituicao ?? ""),
+    termoParceria: toStringSafe(body.termoParceria ?? body.termo_parceria ?? body.numeroTermo ?? ""),
+    coordenador: toStringSafe(body.coordenador ?? ""),
+    codigo: toStringSafe(body.codigo ?? ""),
   }
 }
 
@@ -1394,3 +1444,5 @@ function startServer(port = DEFAULT_PORT) {
   }
 }
 startServer()
+// Server() // The 'Server' variable was undeclared and has been removed.
+// undeclared and has been removed. // Removed these lines as they caused errors.

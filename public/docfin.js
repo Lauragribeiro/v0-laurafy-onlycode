@@ -1746,6 +1746,45 @@ document.addEventListener("DOMContentLoaded", () => {
   })
 
   /* ================== Carregar projeto + linhas ================== */
+  async function loadProject(id) {
+    try {
+      const res = await fetch("/api/projects")
+      if (!res.ok) throw new Error("Erro ao carregar projetos")
+      const data = await res.json()
+      const projects = data.data || []
+      const project = projects.find((p) => String(p.id) === String(id))
+
+      if (project) {
+        projectId = id
+        currentProject = project
+        window.currentProject = project
+
+        console.log("[v0] Projeto carregado:", {
+          id: project.id,
+          titulo: project.titulo,
+          cnpj: project.cnpj,
+          termoParceria: project.termoParceria,
+          instituicao: project.instituicao,
+        })
+
+        vigenciaInicio = project.vigenciaInicio || null
+        vigenciaFim = project.vigenciaFim || null
+
+        // Atualizar UI
+        const projectSelect = document.getElementById("projectSelect")
+        if (projectSelect) {
+          projectSelect.value = id
+        }
+
+        return project
+      }
+
+      throw new Error("Projeto não encontrado")
+    } catch (err) {
+      console.error("[v0] Erro ao carregar projeto:", err)
+      throw err
+    }
+  }
   ;(async () => {
     try {
       const url = new URL(location.href)
@@ -2606,6 +2645,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------- payload builders ----------
   function buildPayloadFolha() {
     const proj = window.currentProject || {}
+    console.log("[v0] buildPayloadFolha - currentProject:", {
+      instituicao: proj.instituicao,
+      cnpj: proj.cnpj,
+      termoParceria: proj.termoParceria,
+      titulo: proj.titulo,
+      codigo: proj.codigo,
+    })
+
     const row = getSelectedRowFromModal()
     if (!row) return { error: "Abra/seleciona uma linha antes de gerar a Folha de Rosto." }
 
@@ -2764,7 +2811,7 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       processo: {
         naturezaDisp: S(natureza),
-        objeto: S(objetoDesc),
+        objeto: objetoDesc,
         favorecidoNome: S(row.favorecido),
         favorecidoDoc: S(row.cnpj),
         dataPagamentoISO: S(row.dataPagamento || ""),

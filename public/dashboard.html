@@ -115,6 +115,17 @@
             <span>Coordenador</span>
             <input type="text" name="coordenador" id="pe-coordenador" />
           </label>
+
+          <!-- Adicionando campos CNPJ e Termo de Parceria -->
+          <label class="field">
+            <span>CNPJ da Instituição</span>
+            <input type="text" name="cnpj" id="pe-cnpj" placeholder="00.000.000/0000-00" />
+          </label>
+
+          <label class="field">
+            <span>Nº Termo de Parceria</span>
+            <input type="text" name="termoParceria" id="pe-termo" placeholder="Ex: 001/2025" />
+          </label>
         </div>
 
         <div class="row" style="justify-content: flex-end; gap: 8px; margin-top: 16px;">
@@ -175,11 +186,18 @@
           <span>Nome do Gerente de Projeto</span>
           <input name="gerente" type="text" required />
         </label>
-      </div>
-      <label class="field">
-          <span>Coordenador do Projeto</span>
-         <input name="coordenador" type="text" />
+
+        <!-- Adicionando campos CNPJ e Termo de Parceria no modal de novo projeto -->
+        <label class="field">
+          <span>CNPJ da Instituição</span>
+          <input name="cnpj" type="text" placeholder="00.000.000/0000-00" />
         </label>
+
+        <label class="field">
+          <span>Nº Termo de Parceria</span>
+          <input name="termoParceria" type="text" placeholder="Ex: 001/2025" />
+        </label>
+      </div>
 
       <div class="modal__footer">
         <button type="button" class="btn" id="btn-cancel">Cancelar</button>
