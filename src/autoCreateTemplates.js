@@ -14,6 +14,11 @@ const FOLHA_DIR = path.join(TEMPLATES_DIR, "folha_rosto")
 const MAPA_DIR = path.join(TEMPLATES_DIR, "mapa")
 const DISPENSA_DIR = path.join(TEMPLATES_DIR, "dispensa")
 
+console.log("[autoCreateTemplates] Módulo carregado")
+console.log("[autoCreateTemplates] TEMPLATES_DIR:", TEMPLATES_DIR)
+console.log("[autoCreateTemplates] FOLHA_DIR:", FOLHA_DIR)
+console.log("[autoCreateTemplates] MAPA_DIR:", MAPA_DIR)
+
 function placeholder(name) {
   return `{${name}}`
 }
@@ -201,27 +206,62 @@ function createJustificativaTemplate() {
 
 async function saveDocument(doc, filePath, fileName) {
   try {
+    console.log(`[autoCreateTemplates] 🔄 Criando: ${fileName}`)
+    console.log(`[autoCreateTemplates] 📁 Diretório: ${filePath}`)
+
+    if (!fs.existsSync(filePath)) {
+      console.log(`[autoCreateTemplates] 📂 Criando diretório: ${filePath}`)
+      fs.mkdirSync(filePath, { recursive: true })
+    }
+
     const buffer = await Packer.toBuffer(doc)
     const fullPath = path.join(filePath, fileName)
+
+    console.log(`[autoCreateTemplates] 💾 Salvando em: ${fullPath}`)
     fs.writeFileSync(fullPath, buffer)
-    return true
+
+    if (fs.existsSync(fullPath)) {
+      const stats = fs.statSync(fullPath)
+      console.log(`[autoCreateTemplates] ✅ Template criado com sucesso: ${fileName} (${stats.size} bytes)`)
+      return true
+    } else {
+      console.error(`[autoCreateTemplates] ❌ Arquivo não foi criado: ${fullPath}`)
+      return false
+    }
   } catch (error) {
-    console.error(`[autoCreateTemplates] Erro ao criar ${fileName}:`, error.message)
+    console.error(`[autoCreateTemplates] ❌ Erro ao criar ${fileName}:`, error.message)
+    console.error(`[autoCreateTemplates] Stack trace:`, error.stack)
     return false
   }
 }
 
 function templateExists(filePath, fileName) {
-  return fs.existsSync(path.join(filePath, fileName))
+  const fullPath = path.join(filePath, fileName)
+  const exists = fs.existsSync(fullPath)
+  console.log(`[autoCreateTemplates] Verificando ${fileName}: ${exists ? "✓ existe" : "✗ não existe"}`)
+  return exists
 }
 
 export async function ensureTemplatesExist() {
-  // Criar diretórios se não existirem
-  ;[TEMPLATES_DIR, FOLHA_DIR, MAPA_DIR, DISPENSA_DIR].forEach((dir) => {
+  console.log("[autoCreateTemplates] ========================================")
+  console.log("[autoCreateTemplates] Iniciando verificação de templates...")
+  console.log("[autoCreateTemplates] ========================================")
+  console.log(`[autoCreateTemplates] Diretório base: ${TEMPLATES_DIR}`)
+
+  const dirs = [TEMPLATES_DIR, FOLHA_DIR, MAPA_DIR, DISPENSA_DIR]
+  for (const dir of dirs) {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
+      console.log(`[autoCreateTemplates] 📂 Criando diretório: ${dir}`)
+      try {
+        fs.mkdirSync(dir, { recursive: true })
+        console.log(`[autoCreateTemplates] ✅ Diretório criado: ${dir}`)
+      } catch (error) {
+        console.error(`[autoCreateTemplates] ❌ Erro ao criar diretório ${dir}:`, error.message)
+      }
+    } else {
+      console.log(`[autoCreateTemplates] ✓ Diretório existe: ${dir}`)
     }
-  })
+  }
 
   const templates = [
     { dir: FOLHA_DIR, name: "folha_rosto_edge.docx", create: () => createFolhaRostoTemplate("edge") },
@@ -232,18 +272,53 @@ export async function ensureTemplatesExist() {
   ]
 
   let created = 0
+  let checked = 0
+  let failed = 0
+
   for (const template of templates) {
+    checked++
+    const fullPath = path.join(template.dir, template.name)
+
+    console.log(`[autoCreateTemplates] ----------------------------------------`)
+    console.log(`[autoCreateTemplates] Verificando template ${checked}/${templates.length}: ${template.name}`)
+
     if (!templateExists(template.dir, template.name)) {
-      console.log(`[autoCreateTemplates] Criando template ausente: ${template.name}`)
-      const doc = template.create()
-      if (await saveDocument(doc, template.dir, template.name)) {
-        created++
+      console.log(`[autoCreateTemplates] ⚠️  Template ausente, criando...`)
+
+      try {
+        const doc = template.create()
+        const success = await saveDocument(doc, template.dir, template.name)
+
+        if (success) {
+          created++
+          console.log(`[autoCreateTemplates] ✅ Template criado: ${template.name}`)
+        } else {
+          failed++
+          console.error(`[autoCreateTemplates] ❌ Falha ao criar: ${template.name}`)
+        }
+      } catch (error) {
+        failed++
+        console.error(`[autoCreateTemplates] ❌ Erro ao criar ${template.name}:`, error.message)
+        console.error(`[autoCreateTemplates] Stack:`, error.stack)
       }
+    } else {
+      console.log(`[autoCreateTemplates] ✓ Template já existe: ${template.name}`)
     }
   }
 
+  console.log(`[autoCreateTemplates] ========================================`)
+  console.log(`[autoCreateTemplates] Verificação concluída:`)
+  console.log(`[autoCreateTemplates]   - Templates verificados: ${checked}`)
+  console.log(`[autoCreateTemplates]   - Templates criados: ${created}`)
+  console.log(`[autoCreateTemplates]   - Falhas: ${failed}`)
+  console.log(`[autoCreateTemplates] ========================================`)
+
   if (created > 0) {
-    console.log(`[autoCreateTemplates] ✅ ${created} template(s) criado(s) automaticamente`)
+    console.log(`[autoCreateTemplates] ✅ ${created} template(s) criado(s) com sucesso`)
+  }
+
+  if (failed > 0) {
+    console.error(`[autoCreateTemplates] ⚠️  ${failed} template(s) falharam ao ser criados`)
   }
 
   return created
