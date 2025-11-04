@@ -736,6 +736,10 @@ function normalizeProjectInput(body = {}) {
     instituicao: toStringSafe(body.instituicao ?? body.nomeInstituicao ?? ""),
     status: toStringSafe(body.status ?? ""),
     observacoes: toStringSafe(body.observacoes ?? body.obs ?? ""),
+    cnpj: toStringSafe(body.cnpj ?? body.cnpjInstituicao ?? ""),
+    termoParceria: toStringSafe(body.termoParceria ?? body.termo_parceria ?? body.numeroTermo ?? ""),
+    coordenador: toStringSafe(body.coordenador ?? ""),
+    codigo: toStringSafe(body.codigo ?? ""),
   }
 }
 

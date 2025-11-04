@@ -11,6 +11,8 @@
       "instituicao": "EDGE",
       "coordenador": "Laura teste teste",
       "gerente": "Maria",
+      "cnpj": "12.345.678/0001-90",
+      "termoParceria": "001/2025",
       "updatedAt": "2025-10-09T14:46:32.789Z"
     },
     {
@@ -22,7 +24,9 @@
       "responsavel": "Maria",
       "status": "em_andamento",
       "instituicao": "EDGE",
-      "coordenador": "Laura"
+      "coordenador": "Laura",
+      "cnpj": "12.345.678/0001-90",
+      "termoParceria": "002/2025"
     },
     {
       "id": 1759174577339,
@@ -32,7 +36,9 @@
       "vigenciaFim": "2026-06-12",
       "responsavel": "TESTEEEEE",
       "status": "em_andamento",
-      "instituicao": "EDGE"
+      "instituicao": "EDGE",
+      "cnpj": "12.345.678/0001-90",
+      "termoParceria": "003/2025"
     },
     {
       "id": 1759152634110,
@@ -41,7 +47,9 @@
       "vigenciaInicio": "2025-12-12",
       "vigenciaFim": "2025-12-12",
       "responsavel": "MARIA ",
-      "status": "em_andamento"
+      "status": "em_andamento",
+      "cnpj": "",
+      "termoParceria": ""
     },
     {
       "id": 1759149011623,
@@ -50,7 +58,9 @@
       "vigenciaInicio": "2025-06-12",
       "vigenciaFim": "2026-12-12",
       "responsavel": "Maria",
-      "status": "em_andamento"
+      "status": "em_andamento",
+      "cnpj": "",
+      "termoParceria": ""
     },
     {
       "id": 2,
@@ -59,7 +69,9 @@
       "vigenciaInicio": "2025-02-01",
       "vigenciaFim": "2025-11-30",
       "responsavel": "João",
-      "status": "pendente"
+      "status": "pendente",
+      "cnpj": "",
+      "termoParceria": ""
     },
     {
       "id": 3,
@@ -68,7 +80,9 @@
       "vigenciaInicio": "2025-03-01",
       "vigenciaFim": "2025-09-30",
       "responsavel": "Ana",
-      "status": "finalizado"
+      "status": "finalizado",
+      "cnpj": "",
+      "termoParceria": ""
     }
   ]
 }
