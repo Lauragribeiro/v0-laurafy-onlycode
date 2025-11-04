@@ -37,6 +37,15 @@ function createTable(rows) {
   })
 }
 
+// Função para criar loops do docxtemplater corretamente
+function createLoopPlaceholder(arrayName, content) {
+  return [
+    new TextRun({ text: `{{#${arrayName}}}`, font: "Arial" }),
+    ...content,
+    new TextRun({ text: `{{/${arrayName}}}`, font: "Arial" }),
+  ]
+}
+
 // FOLHA DE ROSTO - EDGE
 function createFolhaRostoEdge() {
   const doc = new Document({
@@ -305,7 +314,6 @@ function createMapaCotacaoEdge() {
             spacing: { after: 200 },
           }),
 
-          // Tabela de propostas com loop
           createTable([
             new TableRow({
               children: [
@@ -318,13 +326,27 @@ function createMapaCotacaoEdge() {
             }),
             new TableRow({
               children: [
-                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("#propostas")] })] }),
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "{{#propostas}}", font: "Arial" }),
+                        createPlaceholderText("selecao"),
+                      ],
+                    }),
+                  ],
+                }),
                 new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("ofertante")] })] }),
                 new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("cnpj_ofertante")] })] }),
                 new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("data_cotacao")] })] }),
                 new TableCell({
                   children: [
-                    new Paragraph({ children: [createPlaceholderText("valor"), new TextRun("{{/propostas}}")] }),
+                    new Paragraph({
+                      children: [
+                        createPlaceholderText("valor"),
+                        new TextRun({ text: "{{/propostas}}", font: "Arial" }),
+                      ],
+                    }),
                   ],
                 }),
               ],
@@ -433,7 +455,6 @@ function createMapaCotacaoVertex() {
             spacing: { after: 200 },
           }),
 
-          // Tabela de propostas
           createTable([
             new TableRow({
               children: [
@@ -446,13 +467,27 @@ function createMapaCotacaoVertex() {
             }),
             new TableRow({
               children: [
-                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("#propostas")] })] }),
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "{{#propostas}}", font: "Arial" }),
+                        createPlaceholderText("selecao"),
+                      ],
+                    }),
+                  ],
+                }),
                 new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("ofertante")] })] }),
                 new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("cnpj_ofertante")] })] }),
                 new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("data_cotacao")] })] }),
                 new TableCell({
                   children: [
-                    new Paragraph({ children: [createPlaceholderText("valor"), new TextRun("{{/propostas}}")] }),
+                    new Paragraph({
+                      children: [
+                        createPlaceholderText("valor"),
+                        new TextRun({ text: "{{/propostas}}", font: "Arial" }),
+                      ],
+                    }),
                   ],
                 }),
               ],
