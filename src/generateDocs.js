@@ -12,6 +12,7 @@ import { ensureFields, REQUIRED_MAPA, REQUIRED_FOLHA } from "./utils/templateGua
 import { ensureOpenAIClient, hasOpenAIKey } from "./openaiProvider.js"
 import { extrairCotacoesDeTexto, gerarObjetoEJustificativa } from "./gptMapa.js"
 import { escapeXml, renderDocxBuffer } from "./utils/docxTemplate.js"
+import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx"
 
 /** ===== OpenAI opcional (para extrair dados das cotações) ===== */
 const hasOpenAI = hasOpenAIKey()
@@ -559,13 +560,14 @@ router.post("/folha-rosto", async (req, res) => {
 
     const templatePath = path.join(TPL_FOLHA_DIR, `folha_rosto_${instituicao.toLowerCase()}.docx`)
 
+    const templateCreated = await createTemplateIfMissing(templatePath, `folha_rosto_${instituicao.toLowerCase()}.docx`)
+
     if (!fs.existsSync(templatePath)) {
       console.error(`Template ausente: ${templatePath}`)
-      console.log(`Execute 'npm run create-templates' para criar os templates necessários.`)
       return res.status(404).json({
         ok: false,
         error: `Template não encontrado: folha_rosto_${instituicao.toLowerCase()}.docx`,
-        hint: "Execute 'npm run create-templates' para criar os templates.",
+        hint: "Erro ao criar template automaticamente. Verifique as permissões do diretório.",
       })
     }
 
@@ -1048,4 +1050,81 @@ export function registerDocRoutes(app, { /* openai não usado aqui */ TEMPLATE_B
   // fazia com que o prefixo "/api/generate" continuasse presente em req.url,
   // resultando em 404.
   app.use("/api/generate", router)
+}
+
+async function createTemplateIfMissing(templatePath, templateName) {
+  if (fs.existsSync(templatePath)) {
+    return true
+  }
+
+  console.log(`[AUTO-CREATE] Template ausente: ${templateName}, criando automaticamente...`)
+
+  try {
+    const dir = path.dirname(templatePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+      console.log(`[AUTO-CREATE] Diretório criado: ${dir}`)
+    }
+
+    // Criar documento básico com placeholders
+    const doc = new Document({
+      sections: [
+        {
+          properties: {},
+          children: [
+            new Paragraph({
+              text: "FOLHA DE ROSTO - PRESTAÇÃO DE CONTAS",
+              heading: HeadingLevel.HEADING_1,
+              alignment: AlignmentType.CENTER,
+            }),
+            new Paragraph({ text: "" }),
+            new Paragraph({
+              children: [new TextRun({ text: "Instituição: ", bold: true }), new TextRun("{instituicao}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "Projeto: ", bold: true }), new TextRun("{projeto_nome}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "Código: ", bold: true }), new TextRun("{projeto_codigo}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "PC Número: ", bold: true }), new TextRun("{pc_numero}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "Natureza: ", bold: true }), new TextRun("{natureza_disp}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "Favorecido: ", bold: true }), new TextRun("{favorecido}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "CNPJ/CPF: ", bold: true }), new TextRun("{cnpj}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "Nº Extrato: ", bold: true }), new TextRun("{n_extrato}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "NF/Recibo: ", bold: true }), new TextRun("{nf_recibo}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "Data Emissão: ", bold: true }), new TextRun("{data_emissao}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "Data Pagamento: ", bold: true }), new TextRun("{data_pagamento}")],
+            }),
+            new Paragraph({
+              children: [new TextRun({ text: "Valor Pago: ", bold: true }), new TextRun("{valor_pago}")],
+            }),
+          ],
+        },
+      ],
+    })
+
+    const buffer = await Packer.toBuffer(doc)
+    fs.writeFileSync(templatePath, buffer)
+    console.log(`[AUTO-CREATE] Template criado com sucesso: ${templatePath}`)
+    return true
+  } catch (err) {
+    console.error(`[AUTO-CREATE] Erro ao criar template ${templateName}:`, err)
+    return false
+  }
 }
