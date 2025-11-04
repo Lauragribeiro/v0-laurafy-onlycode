@@ -10,7 +10,7 @@ dayjs.locale("pt-br")
 import { buildPayloadBase } from "./utils/docxPayload.js"
 import { ensureFields, REQUIRED_MAPA, REQUIRED_FOLHA } from "./utils/templateGuards.js"
 import { ensureOpenAIClient, hasOpenAIKey } from "./openaiProvider.js"
-import { extrairCotacoesDeTexto, gerarObjetoEJustificativa } from "./gptMapa.js"
+import { extrairCotacoesDeTexto } from "./gptMapa.js"
 import { escapeXml, renderDocxBuffer } from "./utils/docxTemplate.js"
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx"
 
@@ -844,66 +844,36 @@ router.post("/mapa-cotacao", async (req, res) => {
       propostas.push(normalizeProposal({}, propostas.length))
     }
 
-    const propostasForTemplate = propostas.map((p, idx) => ({
-      selecao: p.selecao || `Cotação ${idx + 1}`,
-      ofertante: p.ofertante || "",
-      cnpj: p.cnpj || p.cnpj_ofertante || "",
-      cnpj_ofertante: p.cnpj_ofertante || p.cnpj || "",
-      data: p.data_cotacao || p.data || "",
-      data_cotacao: p.data_cotacao || p.data || "",
-      valor: p.valor || "",
-    }))
-
-    const propostasParaLLM = propostas.filter(hasProposalData).map((p) => ({
-      selecao: p.selecao,
-      ofertante: p.ofertante,
-      cnpj: p.cnpj || p.cnpj_ofertante || "",
-      dataCotacao: p.data_cotacao || "",
-      valor: p.valor || (Number.isFinite(p.valor_num) ? fmtBRL(p.valor_num) : ""),
-    }))
-
-    // ==================== textos finais ====================
-    const fallbackComplemento =
-      "Seleção pautada pela melhor proposta e pelo custo-benefício, considerando conformidade técnica, prazos e valor."
-    let justificativaFinal = String(justBase || "").trim()
-    let objetoFinal = String(objetoDesc || "").trim()
-    const localidade = body.localidade || meta.localidade || "Maceió"
-
-    if (openaiClient && propostasParaLLM.length) {
-      try {
-        const { objeto, justificativa: justAI } = await gerarObjetoEJustificativa({
-          instituicao,
-          projeto: projetoNome || "",
-          codigo_projeto: projetoCodigo || "",
-          rubrica: tipoRubrica || "",
-          justificativa_base: justificativaFinal,
-          json_propostas: JSON.stringify(propostasParaLLM, null, 2),
-          data_pagamento: dataPagamento || "",
-          localidade,
-        })
-        if (objeto) objetoFinal = normalizeObjetoTexto(objeto)
-        if (justAI) justificativaFinal = justAI
-      } catch (err) {
-        console.warn("[mapa] gerarObjetoEJustificativa falhou:", err?.message || err)
-      }
-    }
-
-    if (!objetoFinal) objetoFinal = normalizeObjetoTexto(objetoDesc || "")
-    if (!objetoFinal) {
-      objetoFinal = buildObjetoFallback(tipoRubrica, propostasForTemplate, cotacoesNomes)
-    }
-
-    if (!justificativaFinal) {
-      justificativaFinal = fallbackComplemento
-    } else if (!justificativaFinal.toLowerCase().includes("custo-benef")) {
-      const trimmed = justificativaFinal.trim().replace(/\s+/g, " ")
-      justificativaFinal = trimmed.replace(/([^.?!])$/, "$1.")
-      justificativaFinal += ` ${fallbackComplemento}`
+    const docData = {
+      instituicao: String(instituicao).toUpperCase(),
+      termo_parceria: termoParceria || "—",
+      codigo_projeto: projetoCodigo || termoParceria || "—",
+      projeto_nome: projetoNome || "—",
+      projeto: projetoNome || "—",
+      natureza_disp: tipoRubrica || "—",
+      rubrica: tipoRubrica || "—",
+      objeto: objetoDesc || "—",
+      data_aquisicao: dataPagamento || "—",
+      justificativa: justBase || "—",
+      local_data: `Maceió, ${new Date().toLocaleDateString("pt-BR")}`,
+      localidade: "Maceió",
+      dia: new Date().getDate().toString(),
+      mes: new Date().toLocaleDateString("pt-BR", { month: "long" }),
+      ano: new Date().getFullYear().toString(),
+      coordenador_nome: coordenadorNome || "—",
+      coordenador: coordenadorNome || "—",
+      propostas: propostas.map((p) => ({
+        selecao: p.selecao || "",
+        ofertante: p.ofertante || "",
+        cnpj_ofertante: p.cnpj_ofertante || "",
+        data_cotacao: p.data_cotacao || "",
+        valor: p.valor || "",
+      })),
     }
 
     // ==================== rodapé ====================
     const hoje = dayjs()
-    const localData = `${localidade}, ${hoje.format("DD")} de ${hoje.format("MMMM")} de ${hoje.format("YYYY")}`
+    const localData = `${docData.localidade}, ${hoje.format("DD")} de ${hoje.format("MMMM")} de ${hoje.format("YYYY")}`
     // ==================== renderização ====================
     const templateFile = pickMapaTemplate(instituicao)
     const templatePath = path.join(TPL_MAPA_DIR, templateFile)
@@ -912,27 +882,7 @@ router.post("/mapa-cotacao", async (req, res) => {
       return res.status(404).json({ ok: false, error: `Template não encontrado: ${templateFile}` })
     }
 
-    const docData = {
-      // cabeçalho
-      instituicao: String(instituicao).toUpperCase(),
-      cnpj_inst: cnpjInstituicao || "—",
-      termo_parceria: termoParceria || "—",
-      projeto_nome: projetoNome || "—",
-      projeto_codigo: projetoCodigo || "—",
-
-      // corpo
-      natureza_disp: tipoRubrica || "—", // ✅ usa EXATAMENTE tipoRubrica
-      objeto: objetoFinal || "—",
-      propostas: propostasForTemplate,
-
-      // rodapé
-      data_aquisicao: dataPagamento || "—",
-      justificativa: justificativaFinal || "—",
-      local_data: localData,
-      coordenador_nome: coordenadorNome || "—",
-    }
-
-    const preenchimentoFinal = avaliarPreenchimentoPropostas(propostasForTemplate)
+    const preenchimentoFinal = avaliarPreenchimentoPropostas(docData.propostas)
     if (preenchimentoFinal.pendencias.length) {
       avisosCotacao.push(...preenchimentoFinal.pendencias)
     }
@@ -945,7 +895,7 @@ router.post("/mapa-cotacao", async (req, res) => {
     const headerValue = encodeHeaderPayload(headerPayload)
 
     const out = renderDocx(templatePath, docData)
-    const hint = sanitizeFilename(body.filenameHint || `MapaCotacao_${projetoCodigo}`, "mapa_cotacao")
+    const hint = sanitizeFilename(body.filenameHint || `MapaCotacao_${docData.codigo_projeto}`, "mapa_cotacao")
 
     res.setHeader("X-Mapa-Status", preenchimentoFinal.completo ? "complete" : "incomplete")
     if (headerValue) {

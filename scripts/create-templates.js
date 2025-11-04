@@ -33,24 +33,36 @@ const DISPENSA_DIR = path.join(TEMPLATES_DIR, "dispensa")
 })
 
 function placeholder(name) {
-  return `{{${name}}}`
+  return `{${name}}`
 }
 
 function createFolhaRostoTemplate(instituicao) {
-  const isEdge = instituicao.toLowerCase() === "edge"
+  const isVertex = instituicao.toLowerCase() === "vertex"
 
   const doc = new Document({
     sections: [
       {
         properties: {},
         children: [
-          // Cabeçalho da instituição
-          new Paragraph({
-            text: isEdge ? "EDGE CAPITAL" : "VERTEX - Instituto de Tecnologia e Inovação",
-            heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }),
+          // Cabeçalho VERTEX (se aplicável)
+          ...(isVertex
+            ? [
+                new Paragraph({
+                  text: "VERTEX - Instituto de Tecnologia e Inovação",
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 100 },
+                }),
+                new Paragraph({
+                  text: "Rua Melo Póvoas, 110 - Centro de Inovação do Jaraguá, Sala 113",
+                  alignment: AlignmentType.CENTER,
+                }),
+                new Paragraph({
+                  text: "Maceió, Alagoas",
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 400 },
+                }),
+              ]
+            : []),
 
           // Informações do projeto
           new Paragraph({
@@ -58,65 +70,64 @@ function createFolhaRostoTemplate(instituicao) {
               new TextRun({ text: "Instituição Executora: ", bold: true }),
               new TextRun({ text: placeholder("instituicao") }),
             ],
+            spacing: { after: 100 },
           }),
           new Paragraph({
-            children: [
-              new TextRun({ text: "CNPJ: ", bold: true }),
-              new TextRun({ text: placeholder("cnpj_instituicao") }),
-            ],
+            children: [new TextRun({ text: "CNPJ: ", bold: true }), new TextRun({ text: "  " })],
+            spacing: { after: 100 },
           }),
           new Paragraph({
             children: [
               new TextRun({ text: "Termo de Parceria nº: ", bold: true }),
-              new TextRun({ text: placeholder("termo_parceria") }),
+              new TextRun({ text: placeholder("projeto_codigo") }),
             ],
+            spacing: { after: 100 },
           }),
           new Paragraph({
             children: [
               new TextRun({ text: "Projeto: ", bold: true }),
               new TextRun({ text: placeholder("projeto_nome") }),
             ],
+            spacing: { after: 200 },
           }),
-          new Paragraph({ text: "" }),
           new Paragraph({
             children: [
               new TextRun({ text: "Prestação de Contas: ", bold: true }),
               new TextRun({ text: placeholder("pc_numero") }),
             ],
+            spacing: { after: 300 },
           }),
-          new Paragraph({ text: "" }),
 
           // Natureza de Dispêndio
           new Paragraph({
             children: [new TextRun({ text: "Natureza de Dispêndio", bold: true })],
+            spacing: { after: 100 },
           }),
           new Paragraph({
             children: [new TextRun({ text: placeholder("rubrica") })],
+            spacing: { after: 200 },
           }),
-          new Paragraph({ text: "" }),
 
-          // Tabela de dados
+          // Primeira tabela: Favorecido, CNPJ, Nº Extrato
           new Table({
-            width: {
-              size: 100,
-              type: WidthType.PERCENTAGE,
-            },
+            width: { size: 100, type: WidthType.PERCENTAGE },
             rows: [
-              // Cabeçalho da tabela
               new TableRow({
                 children: [
                   new TableCell({
                     children: [new Paragraph({ text: "Favorecido", bold: true })],
+                    width: { size: 40, type: WidthType.PERCENTAGE },
                   }),
                   new TableCell({
                     children: [new Paragraph({ text: "CNPJ OU CPF", bold: true })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
                   }),
                   new TableCell({
                     children: [new Paragraph({ text: "Nº Extrato", bold: true })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
                   }),
                 ],
               }),
-              // Linha de dados
               new TableRow({
                 children: [
                   new TableCell({
@@ -132,33 +143,33 @@ function createFolhaRostoTemplate(instituicao) {
               }),
             ],
           }),
-          new Paragraph({ text: "" }),
 
-          // Segunda tabela
+          new Paragraph({ text: "", spacing: { after: 200 } }),
+
+          // Segunda tabela: NF/ND, Datas, Valor
           new Table({
-            width: {
-              size: 100,
-              type: WidthType.PERCENTAGE,
-            },
+            width: { size: 100, type: WidthType.PERCENTAGE },
             rows: [
-              // Cabeçalho
               new TableRow({
                 children: [
                   new TableCell({
                     children: [new Paragraph({ text: "NF/ND", bold: true })],
+                    width: { size: 20, type: WidthType.PERCENTAGE },
                   }),
                   new TableCell({
                     children: [new Paragraph({ text: "Data de emissão da NF/ND", bold: true })],
+                    width: { size: 25, type: WidthType.PERCENTAGE },
                   }),
                   new TableCell({
                     children: [new Paragraph({ text: "Data do pagamento", bold: true })],
+                    width: { size: 25, type: WidthType.PERCENTAGE },
                   }),
                   new TableCell({
                     children: [new Paragraph({ text: "Valor", bold: true })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
                   }),
                 ],
               }),
-              // Linha de dados
               new TableRow({
                 children: [
                   new TableCell({
@@ -177,47 +188,30 @@ function createFolhaRostoTemplate(instituicao) {
               }),
             ],
           }),
-          new Paragraph({ text: "" }),
-          new Paragraph({ text: "" }),
+
+          new Paragraph({ text: "", spacing: { after: 400 } }),
 
           // Lista de documentos necessários
           new Paragraph({
             children: [new TextRun({ text: "● Mapa de cotação ou justificativa para dispensa" })],
+            spacing: { after: 100 },
           }),
           new Paragraph({
             children: [new TextRun({ text: "● 3 propostas" })],
+            spacing: { after: 100 },
           }),
           new Paragraph({
             children: [new TextRun({ text: "● Contrato (se houver)" })],
+            spacing: { after: 100 },
           }),
           new Paragraph({
             children: [new TextRun({ text: "● Notas fiscais ou Invoice" })],
+            spacing: { after: 100 },
           }),
           new Paragraph({
             children: [new TextRun({ text: "● Comprovante de pagamento" })],
+            spacing: { after: 400 },
           }),
-          new Paragraph({ text: "" }),
-          new Paragraph({ text: "" }),
-
-          // Rodapé para VERTEX
-          ...(isEdge
-            ? []
-            : [
-                new Paragraph({ text: "" }),
-                new Paragraph({ text: "" }),
-                new Paragraph({
-                  text: "VERTEX - Instituto de Tecnologia e Inovação",
-                  alignment: AlignmentType.CENTER,
-                }),
-                new Paragraph({
-                  text: "Rua Melo Póvoas, 110 - Centro de Inovação do Jaraguá, Sala 113",
-                  alignment: AlignmentType.CENTER,
-                }),
-                new Paragraph({
-                  text: "Maceió, Alagoas",
-                  alignment: AlignmentType.CENTER,
-                }),
-              ]),
         ],
       },
     ],
@@ -279,50 +273,175 @@ function createCustosIncorridosTemplate(instituicao) {
 
 // Template: Mapa de Cotações
 function createMapaCotacoesTemplate(instituicao) {
+  const isVertex = instituicao.toLowerCase() === "vertex"
+
   const doc = new Document({
     sections: [
       {
         properties: {},
         children: [
+          // Cabeçalho VERTEX (se aplicável)
+          ...(isVertex
+            ? [
+                new Paragraph({
+                  text: "VERTEX - Instituto de Tecnologia e Inovação",
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 100 },
+                }),
+                new Paragraph({
+                  text: "Rua Melo Póvoas, 110 - Centro de Inovação do Jaraguá, Sala 113",
+                  alignment: AlignmentType.CENTER,
+                }),
+                new Paragraph({
+                  text: "Maceió, Alagoas",
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 400 },
+                }),
+              ]
+            : []),
+
+          // Título
           new Paragraph({
-            text: instituicao === "edge" ? "EDGE CAPITAL" : "VERTEX CAPITAL",
+            text: "MAPA DE COTAÇÃO",
             heading: HeadingLevel.HEADING_1,
             alignment: AlignmentType.CENTER,
+            spacing: { after: 300 },
           }),
-          new Paragraph({ text: "" }),
+
+          // Informações do projeto
           new Paragraph({
-            text: "MAPA DE COTAÇÕES",
-            heading: HeadingLevel.HEADING_2,
-            alignment: AlignmentType.CENTER,
+            children: [
+              new TextRun({ text: "Instituição Executora: ", bold: true }),
+              new TextRun({ text: placeholder("instituicao") }),
+            ],
+            spacing: { after: 100 },
           }),
-          new Paragraph({ text: "" }),
           new Paragraph({
-            children: [new TextRun({ text: "Projeto: ", bold: true }), new TextRun({ text: placeholder("projeto") })],
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: "Rubrica: ", bold: true }), new TextRun({ text: placeholder("rubrica") })],
+            children: [new TextRun({ text: "CNPJ: ", bold: true }), new TextRun({ text: "  " })],
+            spacing: { after: 200 },
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Descrição: ", bold: true }),
-              new TextRun({ text: placeholder("descricao") }),
+              new TextRun({ text: "Termo de Parceria nº: ", bold: true }),
+              new TextRun({ text: isVertex ? placeholder("codigo_projeto") : placeholder("termo_parceria") }),
+            ],
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Projeto: ", bold: true }),
+              new TextRun({ text: isVertex ? placeholder("projeto") : placeholder("projeto_nome") }),
+            ],
+            spacing: { after: 300 },
+          }),
+
+          // Natureza de Dispêndio
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Natureza de Dispêndio: ", bold: true }),
+              new TextRun({ text: isVertex ? placeholder("rubrica") : placeholder("natureza_disp") }),
+            ],
+            spacing: { after: 200 },
+          }),
+
+          // Objeto da cotação
+          new Paragraph({
+            children: [new TextRun({ text: "Objeto da cotação", bold: true })],
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: placeholder("objeto") })],
+            spacing: { after: 300 },
+          }),
+
+          // Título da tabela de propostas
+          new Paragraph({
+            children: [new TextRun({ text: "Propostas", bold: true })],
+            spacing: { after: 100 },
+          }),
+
+          // Tabela de propostas
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [new Paragraph({ text: "SELEÇÃO", bold: true })],
+                    width: { size: 15, type: WidthType.PERCENTAGE },
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "OFERTANTE", bold: true })],
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "CNPJ / CPF", bold: true })],
+                    width: { size: 20, type: WidthType.PERCENTAGE },
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "DATA DA COTAÇÃO", bold: true })],
+                    width: { size: 15, type: WidthType.PERCENTAGE },
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "VALOR", bold: true })],
+                    width: { size: 20, type: WidthType.PERCENTAGE },
+                  }),
+                ],
+              }),
+              // Placeholder para loop de propostas
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [new Paragraph({ text: placeholder("#propostas") })],
+                    columnSpan: 5,
+                  }),
+                ],
+              }),
             ],
           }),
-          new Paragraph({ text: "" }),
+
+          new Paragraph({ text: "", spacing: { after: 300 } }),
+
+          // Data da Aquisição
           new Paragraph({
-            text: "COTAÇÕES",
-            heading: HeadingLevel.HEADING_3,
+            children: [
+              new TextRun({ text: "Data da Aquisição: ", bold: true }),
+              new TextRun({ text: placeholder("data_aquisicao") }),
+            ],
+            spacing: { after: 200 },
+          }),
+
+          // Justificativa da seleção
+          new Paragraph({
+            children: [new TextRun({ text: "Justificativa da seleção", bold: true })],
+            spacing: { after: 100 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: placeholder("#cotacoes") })],
+            children: [new TextRun({ text: placeholder("justificativa") })],
+            spacing: { after: 400 },
           }),
-          new Paragraph({ text: "" }),
+
+          // Data e local
           new Paragraph({
-            text: "AVISOS",
-            heading: HeadingLevel.HEADING_3,
+            children: [
+              new TextRun({
+                text: isVertex
+                  ? `${placeholder("localidade")}, ${placeholder("dia")} de ${placeholder("mes")} de ${placeholder("ano")}`
+                  : placeholder("local_data"),
+              }),
+            ],
+            spacing: { after: 400 },
+          }),
+
+          // Assinatura
+          new Paragraph({
+            text: "_______________________________",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 100 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: placeholder("#cotacoesAvisos") })],
+            children: [new TextRun({ text: isVertex ? placeholder("coordenador") : placeholder("coordenador_nome") })],
+            alignment: AlignmentType.CENTER,
           }),
         ],
       },
