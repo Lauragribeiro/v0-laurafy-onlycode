@@ -8,7 +8,8 @@
     "dev": "node server.js",
     "test": "node --test",
     "check-templates": "node scripts/check-templates.js",
-    "create-templates": "node scripts/create-templates.js"
+    "create-templates": "node scripts/create-templates.js",
+    "generate-templates": "node scripts/generate-templates-from-text.js"
   },
   "dependencies": {
     "canvas": "^3.2.0",
