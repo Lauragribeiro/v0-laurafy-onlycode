@@ -7,6 +7,7 @@ import fileUpload from "express-fileupload"
 
 import fs from "node:fs"
 import fsp from "node:fs/promises"
+import path from "node:path" // Import path module
 import { dirname, join, extname } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -29,6 +30,7 @@ import cnpjProxyRouter from "./src/cnpjProxy.js"
 // __dirname helpers (ESM)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+const rootDir = __dirname // Define rootDir
 
 // Caminhos úteis
 const PUB = (...p) => join(__dirname, "public", ...p)
@@ -54,40 +56,43 @@ async function ensureBaseDirs() {
   await fsp.mkdir(UPLOADS_DIR, { recursive: true }).catch(() => {})
 
   try {
-    console.log("[server] Verificando e criando templates...")
+    console.log("[server] 🔄 Verificando e criando templates...")
     const created = await ensureTemplatesExist()
 
     if (created > 0) {
-      console.log(`[server] ✅ ${created} template(s) criado(s) automaticamente`)
+      console.log(`[server] ✅ ${created} template(s) criado(s) com sucesso`)
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      console.log("[server] ⏸️  Aguardando 1 segundo para garantir que os templates foram salvos...")
     } else {
       console.log("[server] ✓ Todos os templates já existem")
     }
 
     const criticalTemplates = [
-      join(TEMPLATE_BASE, "folha_rosto", "folha_rosto_edge.docx"),
-      join(TEMPLATE_BASE, "mapa", "mapa_edge.docx"),
+      path.join(rootDir, "src", "templates", "folha_rosto", "folha_rosto_edge.docx"),
+      path.join(rootDir, "src", "templates", "folha_rosto", "folha_rosto_vertex.docx"),
+      path.join(rootDir, "src", "templates", "mapa", "mapa_edge.docx"),
+      path.join(rootDir, "src", "templates", "mapa", "mapa_vertex.docx"),
     ]
 
+    console.log("[server] 🔍 Verificando templates críticos:")
     let allExist = true
     for (const templatePath of criticalTemplates) {
-      if (!fs.existsSync(templatePath)) {
-        console.error(`[server] ❌ ERRO: Template crítico não encontrado: ${templatePath}`)
-        allExist = false
-      } else {
-        const stats = fs.statSync(templatePath)
-        console.log(`[server] ✓ Template existe: ${templatePath} (${stats.size} bytes)`)
-      }
+      const exists = fs.existsSync(templatePath)
+      const status = exists ? "✅" : "❌"
+      const size = exists ? `(${fs.statSync(templatePath).size} bytes)` : ""
+      console.log(`[server]   ${status} ${path.basename(templatePath)} ${size}`)
+      if (!exists) allExist = false
     }
 
     if (!allExist) {
       console.error("[server] ⚠️  ATENÇÃO: Alguns templates críticos não foram criados!")
-      console.error("[server] Execute manualmente: npm run create-templates")
+      console.error("[server] Execute 'npm run generate-templates' para recriar os templates")
+    } else {
+      console.log("[server] ✅ Todos os templates críticos estão disponíveis")
     }
   } catch (error) {
-    console.error("[server] ❌ ERRO CRÍTICO ao verificar/criar templates:")
-    console.error("[server] Mensagem:", error.message)
+    console.error("[server] ❌ Erro ao verificar templates:", error.message)
     console.error("[server] Stack:", error.stack)
-    console.error("[server] ⚠️  O servidor continuará, mas a geração de documentos pode falhar")
   }
 
   console.log("[server] ========================================")
@@ -1117,6 +1122,7 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
     const msg = String(err?.message || "").toLowerCase()
     if (code === 401 || code === "401" || msg.includes("incorrect api key") || msg.includes("invalid api key")) {
       invalidateOpenAIClient()
+      throw new Error("OPENAI_KEY_INVALID")
     }
     console.warn("[mapa] extractFromCotacoesWithAI falhou:", err?.message || err)
     return { objeto: "", propostas: [] }
@@ -1232,6 +1238,8 @@ if (useLegacyMapaRoute) {
     console.log("[v0] Mapa de cotação endpoint called")
     console.log("[v0] Request body keys:", Object.keys(req.body || {}))
 
+    const warnings = []
+
     try {
       const b = req.body || {}
       const isVertex = String(b?.instituicao || "").toUpperCase() === "VERTEX"
@@ -1278,20 +1286,18 @@ if (useLegacyMapaRoute) {
         const guessed = cotacoes.map((c, i) => ({ selecao: `Cotação ${i + 1}`, ...guessFieldsFromText(c.text) }))
         propostas = normalizePropostas(guessed)
         console.log("[v0] Guessed propostas count:", propostas.length)
+
+        const incompleteCount = propostas.filter((p) => !p.ofertante || !p.cnpj_ofertante || !p.valor).length
+        if (incompleteCount > 0) {
+          warnings.push(`${incompleteCount} proposta(s) com dados incompletos extraídos do texto.`)
+        }
       }
 
-      if ((!propostas || propostas.length === 0) && cotacoes.length > 0) {
-        console.log("[v0] Creating empty propostas placeholders")
-        propostas = cotacoes.map((_, i) => ({
-          selecao: `Cotação ${i + 1}`,
-          ofertante: "",
-          cnpj_ofertante: "",
-          data_cotacao: "",
-          valor: "",
-        }))
-      }
-
-      if (hasOpenAI && cotacoes.length && (!objeto || !propostas.length)) {
+      if (
+        hasOpenAI &&
+        cotacoes.length > 0 &&
+        (!objeto || propostas.length === 0 || propostas.some((p) => !p.ofertante || !p.valor))
+      ) {
         console.log("[v0] Attempting AI extraction - hasOpenAI:", hasOpenAI, "cotacoes:", cotacoes.length)
 
         try {
@@ -1321,7 +1327,29 @@ if (useLegacyMapaRoute) {
           }
         } catch (aiError) {
           console.error("[v0] AI extraction failed:", aiError?.message || aiError)
+          if (aiError?.message === "OPENAI_KEY_INVALID") {
+            warnings.push("Chave da OpenAI inválida ou expirada. Usando extração de texto simples.")
+          }
         }
+      }
+
+      if (!propostas || propostas.length === 0) {
+        if (cotacoes.length === 0) {
+          warnings.push("Nenhuma cotação anexada.")
+        } else {
+          warnings.push("Nenhuma proposta identificada nas cotações.")
+        }
+      }
+
+      if ((!propostas || propostas.length === 0) && cotacoes.length > 0) {
+        console.log("[v0] Creating empty propostas placeholders")
+        propostas = cotacoes.map((_, i) => ({
+          selecao: `Cotação ${i + 1}`,
+          ofertante: "",
+          cnpj_ofertante: "",
+          data_cotacao: "",
+          valor: "",
+        }))
       }
 
       const MIN_ROWS = 3
@@ -1334,6 +1362,7 @@ if (useLegacyMapaRoute) {
           valor: "",
         })
       }
+
       const propsForTemplate = (Array.isArray(propostas) ? propostas : []).map((p, i) => ({
         selecao: p.selecao || `Cotação ${i + 1}`,
         ofertante: p.ofertante || p.fornecedor || "",
@@ -1346,44 +1375,85 @@ if (useLegacyMapaRoute) {
 
       console.log("[v0] propsForTemplate count:", propsForTemplate.length)
 
-      const data_aquisicao = fmtBRDate(b.data_aquisicao || b.processo?.dataAquisicaoISO || b.dataPagamento || "")
-      const complemento =
-        " Seleção pautada pela melhor proposta e pelo custo-benefício, considerando conformidade técnica, prazo e valor."
-      const justificativa = String(b.justificativa || b.processo?.justificativa || "") + complemento
-      const rodape = todayParts()
-      const local_data = `${rodape.localidade}, ${rodape.dia} de ${rodape.mes} de ${rodape.ano}`
-      const coordenador_nome = String(b.coordenador || b.proj?.coordenador || "")
+      const dtPg = b?.processo?.dataPagamentoISO || b?.dataPagamento || ""
+      const baseDate = dtPg ? new Date(dtPg) : new Date()
+      const dia = String(baseDate.getDate()).padStart(2, "0")
+      const mesNome = [
+        "janeiro",
+        "fevereiro",
+        "março",
+        "abril",
+        "maio",
+        "junho",
+        "julho",
+        "agosto",
+        "setembro",
+        "outubro",
+        "novembro",
+        "dezembro",
+      ][baseDate.getMonth()]
+      const ano = String(baseDate.getFullYear())
 
       const data = {
-        instituicao: b.instituicao || "",
-        cnpj_inst: b.cnpjInstituicao || b.data?.cnpjInstituicao || b.proj?.cnpj || b.cnpj || "",
-        termo_parceria: b.termoParceria || b.data?.termoParceria || b.proj?.termoParceria || b.termo || "",
-        projeto_nome: b.proj?.projetoNome || b.projeto || b.titulo || "",
-        codigo_projeto: b.proj?.projetoCodigo || b.codigo || b.projetoCodigo || "",
+        instituicao: b.instituicao || b.proj?.instituicao || "",
+        cnpj_instituicao: b.cnpj_instituicao || b.proj?.cnpj || "",
+        termo_parceria: b.termo_parceria || b.proj?.termoParceria || "",
+        codigo_projeto: b.codigo_projeto || b.proj?.projetoCodigo || "",
+        projeto: b.projeto || b.proj?.projetoNome || "",
+        projeto_nome: b.projeto || b.proj?.projetoNome || "",
+        rubrica,
         natureza_disp: rubrica,
-        objeto,
+        objeto: objeto || rubrica,
         propostas: propsForTemplate,
-        data_aquisicao,
-        justificativa,
-        local_data,
-        coordenador_nome,
+        data_aquisicao: fmtBRDate(dtPg),
+        justificativa: b.justificativa || b.processo?.justificativa || "",
+        localidade: b.localidade || b.extras?.cidade || "Maceió",
+        dia,
+        mes: mesNome,
+        ano,
+        local_data: `Maceió, ${dia} de ${mesNome} de ${ano}`,
+        coordenador: b.coordenador || b.proj?.coordenador || "",
+        coordenador_nome: b.coordenador || b.proj?.coordenador || "",
       }
 
-      const buffer = renderDocxFromTemplate(templateName, data)
+      console.log("[v0] Final data for template:", {
+        instituicao: data.instituicao,
+        propostas_count: data.propostas.length,
+        objeto: data.objeto,
+        warnings_count: warnings.length,
+      })
+
+      if (warnings.length > 0) {
+        console.log("[v0] Mapa generated with warnings:", warnings)
+        return res.json({
+          ok: true,
+          warnings,
+          message: "Mapa gerado com pendências",
+          buffer: Buffer.from(renderDocxFromTemplate(templateName, data, "double")).toString("base64"),
+        })
+      }
+
+      const buffer = renderDocxFromTemplate(templateName, data, "double")
       res
         .set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         .set("Content-Disposition", `attachment; filename="mapa_cotacao_${isVertex ? "vertex" : "edge"}.docx"`)
         .send(buffer)
     } catch (err) {
-      console.error("[v0] Mapa generation error:", err)
-      console.error("[v0] Error stack:", err?.stack)
-      res
-        .status(500)
-        .type("text/plain; charset=utf-8")
-        .send(
-          "*** Mapa de Cotação (erro) *** Verifique nomes e pastas em src/templates/mapa.\n\n" +
-            String(err?.message || err),
-        )
+      console.error("[mapa] erro:", err)
+
+      if (err?.message?.includes("Template não encontrado") || err?.message?.includes("ENOENT")) {
+        return res.status(404).json({
+          ok: false,
+          error: "Template não encontrado. Execute 'npm run generate-templates' para criar os templates.",
+          hint: "Os templates devem estar em src/templates/mapa/",
+        })
+      }
+
+      res.status(500).json({
+        ok: false,
+        error: "Erro ao gerar mapa de cotação",
+        details: err?.message || String(err),
+      })
     }
   })
 }

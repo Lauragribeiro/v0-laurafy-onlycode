@@ -9,7 +9,8 @@
     "test": "node --test",
     "check-templates": "node scripts/check-templates.js",
     "create-templates": "node scripts/create-templates.js",
-    "generate-templates": "node scripts/generate-templates-from-text.js"
+    "generate-templates": "node scripts/generate-templates-from-text.js",
+    "verify-templates": "node scripts/verify-templates.js"
   },
   "dependencies": {
     "canvas": "^3.2.0",

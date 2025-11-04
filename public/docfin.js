@@ -646,7 +646,6 @@ document.addEventListener("DOMContentLoaded", () => {
       propostas: propostasAI,
       cotacoes_propostas: clonePropostas(propostasAI),
       cotacoes_avisos: avisosAI,
-      cotacoesAvisos: avisosAI,
       docs: {
         nf: window.formDocs?.nf || null,
         oficio: window.formDocs?.oficio || null,
@@ -2528,7 +2527,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return Array.from(new Set(parts))
   }
 
-  function postAndDownload(url, body, filenameFallback, mime) {
+  async function postAndDownload(url, body, filenameFallback, mime) {
     console.log("[docfin] POST →", url, {
       keys: Object.keys(body || {}),
       propostasLen: Array.isArray(body?.propostas) ? body.propostas.length : 0,
