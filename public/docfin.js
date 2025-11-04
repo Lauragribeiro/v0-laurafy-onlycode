@@ -291,12 +291,15 @@ document.addEventListener("DOMContentLoaded", () => {
     return
   }
 
+  let tableDirty = false // Deklarasi tableDirty
+
   function markTableDirty() {
     if (!btnSave) return
     btnSave.disabled = false
     const txt = btnSave.dataset.defaultLabel || btnSave.textContent || "Salvar tabela"
     if (!btnSave.dataset.defaultLabel) btnSave.dataset.defaultLabel = txt
     btnSave.textContent = txt
+    tableDirty = true // Set tableDirty ke true
   }
 
   /* === SOMENTE "Adicionar à tabela" deve submeter === */
@@ -1827,7 +1830,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault()
-    if (submitting) return
+    if (submitting) {
+      console.log("[docfin] submit já em andamento, ignorando...")
+      return
+    }
     submitting = true
 
     try {
@@ -1953,7 +1959,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   })
   function clearFormForNext() {
-    ;["#inputDataPagamento", "#inputNumeroExtrato", "#inputValorPago", "#inputMesAno", "#inputJust"].forEach((sel) => {
+    ;[
+      "#inputRazaoSocial",
+      "#inputCNPJ",
+      "#inputDataPagamento",
+      "#inputNumeroExtrato",
+      "#inputValorPago",
+      "#inputMesAno",
+      "#inputJust",
+    ].forEach((sel) => {
       const el = $(sel)
       if (el) el.value = ""
     })
@@ -1996,6 +2010,10 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ================== Salvar tabela ================== */
   btnSave.addEventListener("click", async () => {
     try {
+      const originalText = btnSave.textContent
+      btnSave.textContent = "Salvando..."
+      btnSave.disabled = true
+
       const r = await fetch("/api/purchases", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -2003,19 +2021,22 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       const j = await r.json()
       if (j?.ok) {
-        const old = btnSave.textContent
-        btnSave.textContent = "Salvo!"
-        btnSave.disabled = true
+        btnSave.textContent = "✓ Salvo!"
+        tableDirty = false
         setTimeout(() => {
-          btnSave.textContent = old
+          btnSave.textContent = originalText
           btnSave.disabled = false
-        }, 1200)
+        }, 1500)
       } else {
-        alert("Falha ao salvar a tabela.")
+        btnSave.textContent = originalText
+        btnSave.disabled = false
+        alert("Falha ao salvar a tabela: " + (j?.error || "Erro desconhecido"))
       }
     } catch (err) {
       console.error("[docfin] erro ao salvar:", err)
-      alert("Erro ao salvar a tabela.")
+      btnSave.textContent = "Erro ao salvar"
+      btnSave.disabled = false
+      alert("Erro ao salvar a tabela: " + (err?.message || err))
     }
   })
 
@@ -2395,7 +2416,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const parsed = list.map((p, i) => {
       const ofertante = S(p.ofertante || p.fornecedor || p.nome || "")
-      const cnpj_ofertante = S(p.cnpj_ofertante || p.cnpj || p.cpf || p.cnpjCpf || "")
+      const cnpj_ofertante = S(p.cnpj || p.cnpj_ofertante || p.cpf || p.cnpjCpf || "")
       const data_cotacao = toBR(p.data_cotacao || p.dataCotacao || p.data || "")
       const valorRaw = p.valor || p.preco || p.total || p.valorBR || ""
       const valor = toBRL(valorRaw)
@@ -2468,7 +2489,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return Array.from(new Set(parts))
   }
 
-  async function postAndDownload(url, body, filenameFallback, mime) {
+  function postAndDownload(url, body, filenameFallback, mime) {
     console.log("[docfin] POST →", url, {
       keys: Object.keys(body || {}),
       propostasLen: Array.isArray(body?.propostas) ? body.propostas.length : 0,
@@ -2483,105 +2504,110 @@ document.addEventListener("DOMContentLoaded", () => {
     let finalStatus = ""
     let finalDetails = null
 
-    while (attempt < maxAttempts) {
-      const loadingMessage = isMapa
-        ? attempt === 0
-          ? "Gerando mapa de cotação…"
-          : `Reprocessando mapa de cotação (${attempt + 1}/${maxAttempts})…`
-        : "Gerando documento…"
+    return new Promise(async (resolve, reject) => {
+      while (attempt < maxAttempts) {
+        const loadingMessage = isMapa
+          ? attempt === 0
+            ? "Gerando mapa de cotação…"
+            : `Reprocessando mapa de cotação (${attempt + 1}/${maxAttempts})…`
+          : "Gerando documento…"
 
-      let res
+        let res
+        try {
+          res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            loadingMessage,
+          })
+        } catch (e) {
+          console.error("[docfin] Falha de rede:", e)
+          alert("Não consegui conectar ao servidor. Veja o console.")
+          reject(e)
+          return
+        }
+
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "")
+          console.error("[docfin] HTTP", res.status, txt)
+          alert(`Erro ${res.status} ao gerar documento.\n${txt || "(sem detalhes)"}`)
+          reject(new Error(`HTTP ${res.status}`))
+          return
+        }
+
+        const dispo = res.headers.get("Content-Disposition") || ""
+        const statusHeader = res.headers.get("X-Mapa-Status") || ""
+        const detailsHeader = res.headers.get("X-Mapa-Detalhes") || ""
+        const details = parseMapaHeader(detailsHeader)
+
+        const ab = await res.arrayBuffer()
+        const shouldRetry =
+          isMapa && attempt + 1 < maxAttempts && statusHeader && statusHeader.toLowerCase() !== "complete"
+
+        if (shouldRetry) {
+          console.warn(`(mapa) tentativa ${attempt + 1} incompleta`, details)
+          attempt += 1
+          continue
+        }
+
+        finalArrayBuffer = ab
+        finalDisposition = dispo
+        finalStatus = statusHeader
+        finalDetails = details
+        break
+      }
+
+      if (!finalArrayBuffer) {
+        alert("Não foi possível gerar o documento após múltiplas tentativas. Revise os dados e tente novamente.")
+        reject(new Error("Não foi possível gerar o documento após múltiplas tentativas."))
+        return
+      }
+
+      const dispo = finalDisposition || ""
+      const m = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(dispo)
+      const suggested = m ? decodeURIComponent(m[1]) : null
+      const filename = sanitize(suggested || filenameFallback || "documento")
+
+      const blob = new Blob([finalArrayBuffer], {
+        type: mime || "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      })
+
+      const a = document.createElement("a")
+      a.href = URL.createObjectURL(blob)
+      a.download = filename
+      document.body.appendChild(a)
       try {
-        res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          loadingMessage,
-        })
-      } catch (e) {
-        console.error("[docfin] Falha de rede:", e)
-        alert("Não consegui conectar ao servidor. Veja o console.")
-        throw e
+        a.click()
+      } finally {
+        URL.revokeObjectURL(a.href)
+        a.remove()
       }
+      console.log("[docfin] ✓ Download", filename, finalDetails || "")
 
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "")
-        console.error("[docfin] HTTP", res.status, txt)
-        alert(`Erro ${res.status} ao gerar documento.\n${txt || "(sem detalhes)"}`)
-        throw new Error(`HTTP ${res.status}`)
-      }
-
-      const dispo = res.headers.get("Content-Disposition") || ""
-      const statusHeader = res.headers.get("X-Mapa-Status") || ""
-      const detailsHeader = res.headers.get("X-Mapa-Detalhes") || ""
-      const details = parseMapaHeader(detailsHeader)
-
-      const ab = await res.arrayBuffer()
-      const shouldRetry =
-        isMapa && attempt + 1 < maxAttempts && statusHeader && statusHeader.toLowerCase() !== "complete"
-
-      if (shouldRetry) {
-        console.warn(`(mapa) tentativa ${attempt + 1} incompleta`, details)
-        attempt += 1
-        continue
-      }
-
-      finalArrayBuffer = ab
-      finalDisposition = dispo
-      finalStatus = statusHeader
-      finalDetails = details
-      break
-    }
-
-    if (!finalArrayBuffer) {
-      alert("Não foi possível gerar o documento após múltiplas tentativas. Revise os dados e tente novamente.")
-      throw new Error("Não foi possível gerar o documento após múltiplas tentativas.")
-    }
-
-    const dispo = finalDisposition || ""
-    const m = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(dispo)
-    const suggested = m ? decodeURIComponent(m[1]) : null
-    const filename = sanitize(suggested || filenameFallback || "documento")
-
-    const blob = new Blob([finalArrayBuffer], {
-      type: mime || "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    })
-
-    const a = document.createElement("a")
-    a.href = URL.createObjectURL(blob)
-    a.download = filename
-    document.body.appendChild(a)
-    try {
-      a.click()
-    } finally {
-      URL.revokeObjectURL(a.href)
-      a.remove()
-    }
-    console.log("[docfin] ✓ Download", filename, finalDetails || "")
-
-    if (isMapa) {
-      const status = (finalStatus || "").toLowerCase()
-      const pendencias = collectMapaPendencias(finalDetails)
-      if (typeof window !== "undefined") {
-        window.lastMapaStatus = { status: finalStatus || "", detalhes: finalDetails || null }
-      }
-      if (status !== "complete" || pendencias.length) {
-        if (pendencias.length) {
-          alert(`Mapa gerado com pendências:\n- ${pendencias.join("\n- ")}`)
-        } else {
-          alert("Mapa gerado, mas não foi possível confirmar o preenchimento completo das propostas.")
+      if (isMapa) {
+        const status = (finalStatus || "").toLowerCase()
+        const pendencias = collectMapaPendencias(finalDetails)
+        if (typeof window !== "undefined") {
+          window.lastMapaStatus = { status: finalStatus || "", detalhes: finalDetails || null }
+        }
+        if (status !== "complete" || pendencias.length) {
+          if (pendencias.length) {
+            alert(`Mapa gerado com pendências:\n- ${pendencias.join("\n- ")}`)
+          } else {
+            alert("Mapa gerado, mas não foi possível confirmar o preenchimento completo das propostas.")
+          }
         }
       }
-    }
 
-    return { filename, status: finalStatus, detalhes: finalDetails }
+      resolve({ filename, status: finalStatus, detalhes: finalDetails })
+    })
   }
 
   // ---------- payload builders ----------
   function buildPayloadFolha() {
     const proj = window.currentProject || {}
     const row = getSelectedRowFromModal()
-    if (!row) return { error: "Abra/seleciona uma linha antes de gerar a Folha." }
+    if (!row) return { error: "Abra/seleciona uma linha antes de gerar a Folha de Rosto." }
 
     const natureza = getNaturezaDisp(row)
     const dtPg = row.dataPagamento || ""
@@ -2592,10 +2618,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const payload = {
       instituicao: S(proj.instituicao || "EDGE"),
-      cnpj: S(proj.cnpj),
-      termo: S(proj.termoParceria),
+      cnpj_instituicao: S(proj.cnpj || ""),
+      termo_parceria: S(proj.termoParceria || ""),
+      projeto: S(proj.titulo || ""),
+      codigo_projeto: S(proj.codigo || ""),
       numeroPc: S(row.pcNumero),
-      projeto: S(proj.titulo),
       prestacao: S(natureza),
       tipoRubrica: S(natureza),
       favorecido: S(row.favorecido),
@@ -2607,30 +2634,17 @@ document.addEventListener("DOMContentLoaded", () => {
       valor: toBRL(row.valor),
       justificativa: S(row.just || row.justificativa || ""),
       localidade: "Maceió",
-      dia,
-      mes,
-      ano,
       coordenador: S(proj.coordenador || ""),
-      filenameHint: `Folha_${S(proj.codigo || "Projeto")}_${S(row.pcNumero || "")}`,
-      projeto_codigo: S(proj.codigo),
-      projeto_nome: S(proj.titulo),
-      pc_numero: S(row.pcNumero),
-      rubrica: S(natureza),
-      n_extrato: S(row.nExtrato || row.numeroExtrato),
-      nf_recibo: S(row.nf_num || row.nf_num_mask || row.nf || ""),
-      data_emissao: toBR(row.data_emissao || row.dataTitulo || ""),
-      data_pagamento: toBR(row.dataPagamento || ""),
-      valor_pago: toBRL(row.valor),
+      filenameHint: `FolhaRosto_${S(proj.codigo || "Projeto")}_${S(row.pcNumero || "")}`,
       proj: {
         instituicao: S(proj.instituicao || "EDGE"),
-        cnpj: S(proj.cnpj),
-        termoParceria: S(proj.termoParceria),
-        projetoNome: S(proj.titulo),
-        projetoCodigo: S(proj.codigo),
+        cnpj: S(proj.cnpj || ""),
+        termoParceria: S(proj.termoParceria || ""),
+        projetoNome: S(proj.titulo || ""),
+        projetoCodigo: S(proj.codigo || ""),
       },
       processo: {
         naturezaDisp: S(natureza),
-        pcNumero: S(row.pcNumero),
         favorecidoNome: S(row.favorecido),
         favorecidoDoc: S(row.cnpj),
         extratoNumero: S(row.nExtrato || row.numeroExtrato),
@@ -2714,8 +2728,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const payload = {
       instituicao: S(proj.instituicao || "EDGE"),
-      cnpj: S(proj.cnpj),
-      termo: S(proj.termoParceria),
+      cnpj_instituicao: S(proj.cnpj || ""),
+      termo_parceria: S(proj.termoParceria || ""),
+      cnpj: S(proj.cnpj || ""),
+      termo: S(proj.termoParceria || ""),
       numeroPc: S(row.pcNumero),
       projeto: S(proj.titulo),
       prestacao: S(natureza),
@@ -2737,19 +2753,12 @@ document.addEventListener("DOMContentLoaded", () => {
       objetoDescricao: objetoDesc,
       objeto: objetoDesc,
       codigo_projeto: S(proj.codigo),
-      projeto: S(proj.titulo),
       rubrica: S(natureza),
       data_aquisicao: toBR(row.dataPagamento || ""),
-      justificativa: S(row.just || row.justificativa || ""),
-      localidade: "Maceió",
-      dia,
-      mes,
-      ano,
-      coordenador: S(proj.coordenador || ""),
       proj: {
         instituicao: S(proj.instituicao || "EDGE"),
-        cnpj: S(proj.cnpj),
-        termoParceria: S(proj.termoParceria),
+        cnpj: S(proj.cnpj || ""),
+        termoParceria: S(proj.termoParceria || ""),
         projetoNome: S(proj.titulo),
         projetoCodigo: S(proj.codigo),
       },
@@ -2774,6 +2783,8 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("[docfin] buildPayloadMapa", {
       propostasLen: propostas.length,
       cotacoesNoRow: cotacoesSlim.map((c) => c.name),
+      cnpj_instituicao: payload.cnpj_instituicao,
+      termo_parceria: payload.termo_parceria,
     })
 
     return { payload }
@@ -3399,4 +3410,4 @@ document.addEventListener("DOMContentLoaded", () => {
   })
 
   console.log("[docfin] bloco de ações carregado.")
-})() // Adicionando invocação da IIFE para executar o código
+})()
