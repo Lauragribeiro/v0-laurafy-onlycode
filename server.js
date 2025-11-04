@@ -997,78 +997,131 @@ async function pdfToTextFromBuffer(buf) {
     return ""
   }
 }
-async function ensureCotacoesText(cotacoes = []) {
+
+async function parseCotacoes(cotacoes = []) {
   const out = []
   for (const c of cotacoes || []) {
     let name = "cotacao.pdf"
-    let url = ""
     let text = ""
+    let buffer = null
+
     if (typeof c === "string") {
       name = c
-    } else if (c && typeof c === "object") {
-      name = String(c?.name || c?.filename || c?.fileName || name)
-      url = String(c?.url || "")
-      text = String(c?.text || "")
-    }
-    if (!text) {
-      let buf = null
-      if (!buf && c && typeof c === "object" && c?.base64) {
-        try {
-          const b64 = c.base64.replace(/^data:.*;base64,/, "")
-          buf = Buffer.from(b64, "base64")
-        } catch {}
-      }
-      if (!buf && c && typeof c === "object" && c?.path && fs.existsSync(c.path)) {
-        try {
-          buf = fs.readFileSync(c.path)
-        } catch {}
-      }
-      if (!buf && c && typeof c === "object" && c?.filename) {
-        const clean = String(c.filename)
-          .replace(/^https?:\/\/[^/]+\//i, "")
-          .replace(/^uploads\//i, "")
-          .replace(/^\/+/, "")
-          .split(/[\\/]/)
-          .pop()
-        if (clean) {
-          const p = join(process.cwd(), "data", "uploads", clean)
-          if (fs.existsSync(p)) {
-            try {
-              buf = fs.readFileSync(p)
-            } catch {}
-          }
-        }
-      }
-      if (!buf && url) {
-        try {
-          const base = `http://localhost:${process.env.PORT || 3000}`
-          const u = new URL(url, base)
-          if (u.pathname.startsWith("/uploads/")) {
-            const file = decodeURIComponent(u.pathname.split("/").pop())
-            const p = join(process.cwd(), "data", "uploads", file)
-            if (fs.existsSync(p)) buf = fs.readFileSync(p)
-          }
-        } catch {}
-      }
-      if (!buf && typeof c === "string") {
-        const clean = String(c)
-          .replace(/^https?:\/\/[^/]+\//i, "")
-          .replace(/^uploads\//i, "")
-          .replace(/^\/+/, "")
-          .split(/[\\/]/)
-          .pop()
-        const p = clean ? join(process.cwd(), "data", "uploads", clean) : null
-        if (p && fs.existsSync(p)) {
+      const clean = String(c)
+        .replace(/^https?:\/\/[^/]+\//i, "")
+        .replace(/^uploads\//i, "")
+        .replace(/^\/+/, "")
+        .split(/[\\/]/)
+        .pop()
+      if (clean) {
+        const p = join(process.cwd(), "data", "uploads", clean)
+        if (fs.existsSync(p)) {
           try {
-            buf = fs.readFileSync(p)
+            buffer = fs.readFileSync(p)
           } catch {}
         }
       }
-      if (buf) text = await pdfToTextFromBuffer(buf)
+    } else if (c && typeof c === "object") {
+      name = String(c?.name || c?.filename || c?.fileName || name)
+      text = String(c?.text || "")
+      if (!text) {
+        if (c?.base64) {
+          try {
+            const b64 = c.base64.replace(/^data:.*;base64,/, "")
+            buffer = Buffer.from(b64, "base64")
+          } catch {}
+        } else if (c?.path && fs.existsSync(c.path)) {
+          try {
+            buffer = fs.readFileSync(c.path)
+          } catch {}
+        } else if (c?.url) {
+          try {
+            const base = `http://localhost:${process.env.PORT || 3000}`
+            const u = new URL(c.url, base)
+            if (u.pathname.startsWith("/uploads/")) {
+              const file = decodeURIComponent(u.pathname.split("/").pop())
+              const p = join(process.cwd(), "data", "uploads", file)
+              if (fs.existsSync(p)) buffer = fs.readFileSync(p)
+            }
+          } catch {}
+        }
+      }
     }
-    out.push({ name, text: text || "" })
+
+    if (buffer) {
+      text = await pdfToTextFromBuffer(buffer)
+    }
+
+    if (text) {
+      out.push({ name, text })
+    } else if (c && typeof c === "object" && (c.name || c.filename)) {
+      out.push({ name: c.name || c.filename, text: "" }) // Manter o nome mesmo sem texto
+    }
   }
   return out
+}
+
+async function extractCotacoesFromFiles(cotacoes = [], { instituicao = "", rubrica = "" } = {}) {
+  console.log("[v0] extractCotacoesFromFiles - Iniciando extração de cotações")
+  console.log("[v0] Número de cotações recebidas:", cotacoes?.length || 0)
+
+  const parsed = await parseCotacoes(cotacoes)
+  console.log("[v0] Cotações parseadas:", parsed.length)
+
+  if (!parsed.length) {
+    console.log("[v0] Nenhuma cotação foi parseada com sucesso")
+    return { objeto: "", propostas: [] }
+  }
+
+  let aiResult = { objeto: "", propostas: [] }
+  let usedAI = false
+
+  try {
+    console.log("[v0] Tentando extrair dados com IA...")
+    aiResult = await extractFromCotacoesWithAI({ instituicao, rubrica, cotacoes: parsed })
+    usedAI = true
+    console.log("[v0] IA extraiu:", aiResult.propostas.length, "propostas")
+  } catch (err) {
+    console.log("[v0] IA falhou:", err.message)
+    console.log("[v0] Usando fallback de extração de texto...")
+  }
+
+  if (!aiResult.propostas || aiResult.propostas.length === 0) {
+    console.log("[v0] Criando propostas usando extração de texto (fallback)")
+
+    const fallbackPropostas = parsed.map((cot, idx) => {
+      const extracted = guessFieldsFromText(cot.text || "")
+      console.log(`[v0] Cotação ${idx + 1} (${cot.name}):`, {
+        ofertante: extracted.ofertante || "NÃO ENCONTRADO",
+        cnpj: extracted.cnpj_ofertante || "NÃO ENCONTRADO",
+        valor: extracted.valor || "NÃO ENCONTRADO",
+      })
+
+      return {
+        selecao: `Cotação ${idx + 1}`,
+        ofertante: extracted.ofertante || `Fornecedor ${idx + 1}`,
+        cnpj_ofertante: extracted.cnpj_ofertante || "",
+        data_cotacao: extracted.data_cotacao || "",
+        valor: extracted.valor || "R$ 0,00",
+      }
+    })
+
+    aiResult.propostas = fallbackPropostas
+    console.log("[v0] Total de propostas criadas via fallback:", fallbackPropostas.length)
+  }
+
+  if (!aiResult.objeto && rubrica) {
+    aiResult.objeto = rubrica
+    console.log("[v0] Usando rubrica como objeto:", rubrica)
+  }
+
+  console.log("[v0] Resultado final da extração:", {
+    objeto: aiResult.objeto || "NÃO DEFINIDO",
+    propostas_count: aiResult.propostas.length,
+    usedAI,
+  })
+
+  return aiResult
 }
 
 async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotacoes = [] } = {}) {
@@ -1128,58 +1181,111 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
     return { objeto: "", propostas: [] }
   }
 }
+
 function guessFieldsFromText(txt = "") {
   const text = String(txt || "")
-  const rxCNPJ = /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/
-  const rxCPF = /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/
-  const cnpj = (text.match(rxCNPJ) || [])[0] || ""
-  const cpf = !cnpj ? (text.match(rxCPF) || [])[0] : ""
+
+  const rxCNPJ = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g
+  const rxCPF = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g
+
+  let cnpj = ""
+  let cpf = ""
+
+  // Procurar CNPJ primeiro
+  const cnpjMatches = Array.from(text.matchAll(rxCNPJ))
+  if (cnpjMatches.length > 0) {
+    cnpj = cnpjMatches[0][0].replace(/[^\d]/g, "").replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
+  }
+
+  // Se não encontrou CNPJ, procurar CPF
+  if (!cnpj) {
+    const cpfMatches = Array.from(text.matchAll(rxCPF))
+    if (cpfMatches.length > 0) {
+      cpf = cpfMatches[0][0].replace(/[^\d]/g, "").replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+    }
+  }
+
   const docNum = cnpj || cpf || ""
-  const rxDate = /\b([0-3]?\d)\/([01]?\d)\/(\d{2}|\d{4})\b/g
+
+  const rxDate = /\b([0-3]?\d)[/\-.]([01]?\d)[/\-.](\d{2}|\d{4})\b/g
   let dataCot = ""
   for (const m of text.matchAll(rxDate)) {
     const dd = +m[1],
       mm = +m[2]
     if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
-      dataCot = m[0]
+      let year = m[3]
+      if (year.length === 2) year = "20" + year
+      dataCot = `${String(dd).padStart(2, "0")}/${String(mm).padStart(2, "0")}/${year}`
       break
     }
   }
-  const rxBRL = /R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}\b/g
-  let valor = "",
-    max = -1
+
+  const rxBRL = /R?\$?\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2}\b/g
+  let valor = ""
+  let max = -1
   for (const m of text.matchAll(rxBRL)) {
     const raw = m[0].replace(/[^\d,]/g, "")
-    const n = Number(raw.replace(/\./g, "").replace(",", "."))
+    const normalized = raw.replace(/\./g, "").replace(",", ".")
+    const n = Number(normalized)
     if (Number.isFinite(n) && n > max) {
       max = n
-      valor = m[0].trim().replace(/^R?\$?\s*/, "R$ ")
+      // Formatar como BRL
+      valor = `R$ ${n
+        .toFixed(2)
+        .replace(".", ",")
+        .replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`
     }
   }
+
   let ofertante = ""
   const lines = text
     .split(/\r?\n/)
     .map((s) => s.trim())
     .filter(Boolean)
-  const cnpjIdx = lines.findIndex((l) => rxCNPJ.test(l))
-  if (cnpjIdx > 0) {
-    for (let i = Math.max(0, cnpjIdx - 3); i <= cnpjIdx; i++) {
-      const L = lines[i]
-      const m = L.match(/raz[aã]o social\s*[:\-–]\s*(.+)/i)
-      if (m) {
-        ofertante = m[1].trim()
-        break
+
+  // Procurar por "Razão Social" ou variações
+  const razaoSocialPatterns = [
+    /raz[aã]o\s+social\s*[:\-–]?\s*(.+)/i,
+    /empresa\s*[:\-–]?\s*(.+)/i,
+    /fornecedor\s*[:\-–]?\s*(.+)/i,
+    /nome\s+fantasia\s*[:\-–]?\s*(.+)/i,
+  ]
+
+  for (const pattern of razaoSocialPatterns) {
+    const m = text.match(pattern)
+    if (m && m[1]) {
+      ofertante = m[1].split(/\r?\n/)[0].trim()
+      // Limpar caracteres especiais e limitar tamanho
+      ofertante = ofertante.replace(/[^\w\s\-.]/g, "").slice(0, 100)
+      if (ofertante.length > 5) break
+    }
+  }
+
+  // Se não encontrou, tentar pegar a primeira linha que parece um nome de empresa
+  if (!ofertante) {
+    for (const line of lines.slice(0, 10)) {
+      // Linha com mais de 10 caracteres e sem números demais
+      if (line.length > 10 && line.length < 100) {
+        const digitCount = (line.match(/\d/g) || []).length
+        if (digitCount < line.length / 3) {
+          ofertante = line
+          break
+        }
       }
     }
   }
-  if (!ofertante) {
-    const m = text.match(/raz[aã]o social\s*[:\-–]\s*(.+)/i)
-    if (m) ofertante = m[1].split(/\r?\n/)[0].trim()
-  }
+
+  console.log("[v0] guessFieldsFromText extraiu:", {
+    ofertante: ofertante || "NÃO ENCONTRADO",
+    cnpj_ofertante: docNum || "NÃO ENCONTRADO",
+    data_cotacao: dataCot || "NÃO ENCONTRADO",
+    valor: valor || "NÃO ENCONTRADO",
+  })
+
   return {
     ofertante,
-    cnpj_ofertante: fmtBRDate(docNum) ? "" : docNum,
-    data_cotacao: fmtBRDate(dataCot),
+    cnpj_ofertante: docNum,
+    data_cotacao: dataCot,
     valor: valor || "",
   }
 }
@@ -1275,81 +1381,21 @@ if (useLegacyMapaRoute) {
         (Array.isArray(b?.docs?.cotacoes) ? b.docs.cotacoes : null) ?? (Array.isArray(b?.cotacoes) ? b.cotacoes : [])
       console.log("[v0] Cotacoes input count:", cotacoesInput.length)
 
-      const cotacoes = cotacoesInput.length ? await ensureCotacoesText(cotacoesInput) : []
-      console.log(
-        "[v0] cotacoes:",
-        cotacoes.map((c) => c.name),
-      )
+      // Substituir aqui a chamada `ensureCotacoesText` pela nova `extractCotacoesFromFiles`
+      const { objeto: extractedObjeto, propostas: extractedPropostas } = await extractCotacoesFromFiles(cotacoesInput, {
+        instituicao: b.instituicao || "",
+        rubrica,
+      })
 
-      if ((!propostas || propostas.length === 0) && cotacoes.length > 0) {
-        console.log("[v0] Attempting to guess propostas from text")
-        const guessed = cotacoes.map((c, i) => ({ selecao: `Cotação ${i + 1}`, ...guessFieldsFromText(c.text) }))
-        propostas = normalizePropostas(guessed)
-        console.log("[v0] Guessed propostas count:", propostas.length)
-
-        const incompleteCount = propostas.filter((p) => !p.ofertante || !p.cnpj_ofertante || !p.valor).length
-        if (incompleteCount > 0) {
-          warnings.push(`${incompleteCount} proposta(s) com dados incompletos extraídos do texto.`)
-        }
-      }
-
-      if (
-        hasOpenAI &&
-        cotacoes.length > 0 &&
-        (!objeto || propostas.length === 0 || propostas.some((p) => !p.ofertante || !p.valor))
-      ) {
-        console.log("[v0] Attempting AI extraction - hasOpenAI:", hasOpenAI, "cotacoes:", cotacoes.length)
-
-        try {
-          const { objeto: aiObj, propostas: aiProps } = await extractFromCotacoesWithAI({
-            instituicao: b.instituicao || "",
-            rubrica,
-            cotacoes,
-          })
-          console.log("[v0] AI extraction result - objeto:", !!aiObj, "propostas:", aiProps?.length || 0)
-
-          if (!objeto && aiObj) objeto = aiObj
-          if (!propostas.length && aiProps?.length) propostas = aiProps
-          else if (aiProps?.length) {
-            const L = Math.min(propostas.length, aiProps.length)
-            for (let i = 0; i < L; i++) {
-              const p = propostas[i] || {}
-              const a = aiProps[i] || {}
-              propostas[i] = {
-                selecao: p.selecao || a.selecao || `Cotação ${i + 1}`,
-                ofertante: p.ofertante || a.ofertante || "",
-                cnpj_ofertante: p.cnpj_ofertante || a.cnpj_ofertante || a.cnpj || "",
-                data_cotacao: p.data_cotacao || a.data_cotacao || a.data || "",
-                valor: p.valor || a.valor || a.valorBR || "",
-              }
-            }
-            if (aiProps.length > propostas.length) propostas = propostas.concat(aiProps.slice(propostas.length))
-          }
-        } catch (aiError) {
-          console.error("[v0] AI extraction failed:", aiError?.message || aiError)
-          if (aiError?.message === "OPENAI_KEY_INVALID") {
-            warnings.push("Chave da OpenAI inválida ou expirada. Usando extração de texto simples.")
-          }
-        }
-      }
+      if (extractedObjeto) objeto = extractedObjeto
+      if (extractedPropostas && extractedPropostas.length > 0) propostas = extractedPropostas
 
       if (!propostas || propostas.length === 0) {
-        if (cotacoes.length === 0) {
+        if (cotacoesInput.length === 0) {
           warnings.push("Nenhuma cotação anexada.")
         } else {
           warnings.push("Nenhuma proposta identificada nas cotações.")
         }
-      }
-
-      if ((!propostas || propostas.length === 0) && cotacoes.length > 0) {
-        console.log("[v0] Creating empty propostas placeholders")
-        propostas = cotacoes.map((_, i) => ({
-          selecao: `Cotação ${i + 1}`,
-          ofertante: "",
-          cnpj_ofertante: "",
-          data_cotacao: "",
-          valor: "",
-        }))
       }
 
       const MIN_ROWS = 3

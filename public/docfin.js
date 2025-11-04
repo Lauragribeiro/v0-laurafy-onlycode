@@ -2714,6 +2714,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const natureza = getNaturezaDisp(row)
     const cotacoesSlim = pickCotacoesFromRow(row)
     const cotacoesUploads = Array.isArray(row?.docs?.cotacoes) ? row.docs.cotacoes : []
+
+    console.log("[v0] buildPayloadMapa - Dados da linha:", {
+      favorecido: row.favorecido,
+      valor: row.valor,
+      cotacoes_count: cotacoesSlim.length,
+      cotacoes_uploads_count: cotacoesUploads.length,
+    })
+
     const cotacaoFileNames = cotacoesUploads
       .map((entry) => {
         const raw = S(entry?.filename || entry?.key || "") || S(entry?.url || "")
@@ -2740,6 +2748,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!propostasEstr.length && Array.isArray(window.lastParsedDocs?.cotacoes_propostas)) {
       propostasEstr = clonePropostas(window.lastParsedDocs.cotacoes_propostas)
     }
+
+    console.log("[v0] Propostas encontradas antes de normalizar:", propostasEstr.length)
+
     propostasEstr = propostasEstr
       .map((p, idx) => {
         const valorNum = typeof p.valor_num === "number" ? p.valor_num : typeof p.valor === "number" ? p.valor : null
@@ -2755,6 +2766,8 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter((p) => p.ofertante || p.cnpj_ofertante || p.data_cotacao || p.valor)
 
     const propostas = normalizaPropostas(propostasEstr)
+
+    console.log("[v0] Propostas após normalização:", propostas.length)
 
     const dtPg = row.dataPagamento || ""
     const baseDate = dtPg ? new Date(dtPg) : new Date()
@@ -2826,9 +2839,10 @@ document.addEventListener("DOMContentLoaded", () => {
       payload.cotacoesAvisos = cloneAvisos(row.cotacoes_avisos)
     }
 
-    console.log("[docfin] buildPayloadMapa", {
+    console.log("[v0] buildPayloadMapa - Payload final:", {
       propostasLen: propostas.length,
       cotacoesNoRow: cotacoesSlim.map((c) => c.name),
+      cotacoesFileNames: cotacaoFileNames,
       cnpj_instituicao: payload.cnpj_instituicao,
       termo_parceria: payload.termo_parceria,
     })
@@ -3456,4 +3470,4 @@ document.addEventListener("DOMContentLoaded", () => {
   })
 
   console.log("[docfin] bloco de ações carregado.")
-})()
+})()()
