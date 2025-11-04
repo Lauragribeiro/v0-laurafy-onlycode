@@ -1129,6 +1129,7 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
   try {
     const client = ensureOpenAIClient()
     if (!client) return { objeto: "", propostas: [] }
+
     const blocks = (cotacoes || [])
       .map((c, idx) => {
         const name = c?.name || c?.filename || c?.fileName || `Cotacao_${idx + 1}`
@@ -1139,18 +1140,54 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
 
     if (!blocks.length) return { objeto: "", propostas: [] }
 
-    const prompt = `Instituição: ${instituicao || ""}\nRubrica: ${rubrica || ""}\n\nAnalise as cotações a seguir e retorne um JSON com os campos {\n  "objeto": string,\n  "propostas": [ {\"selecao\", \"ofertante\", \"cnpj\", \"dataCotacao\", \"valor\"} ]\n}.\n\n${blocks.join("\n\n")}`
-
-    const resp = await client.responses.create({
+    const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      input: [
+      messages: [
         { role: "system", content: "Você extrai dados estruturados de cotações comerciais e responde em JSON válido." },
-        { role: "user", content: prompt },
+        {
+          role: "user",
+          content: `Instituição: ${instituicao || ""}\nRubrica: ${rubrica || ""}\n\nAnalise as cotações a seguir e extraia:\n- objeto: descrição do que está sendo cotado\n- propostas: array com dados de cada fornecedor (selecao, ofertante, cnpj_ofertante, data_cotacao, valor)\n\n${blocks.join("\n\n")}`,
+        },
       ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "cotacao_mapa",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              objeto: {
+                type: "string",
+                description: "Descrição do objeto da cotação",
+              },
+              propostas: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    selecao: { type: "string", description: "Identificação da proposta (ex: Cotação 1)" },
+                    ofertante: { type: "string", description: "Nome do fornecedor/ofertante" },
+                    cnpj_ofertante: { type: "string", description: "CNPJ ou CPF do ofertante" },
+                    data_cotacao: { type: "string", description: "Data da cotação no formato DD/MM/YYYY" },
+                    valor: { type: "string", description: "Valor da cotação formatado como R$ X.XXX,XX" },
+                  },
+                  required: ["selecao", "ofertante", "cnpj_ofertante", "data_cotacao", "valor"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["objeto", "propostas"],
+            additionalProperties: false,
+          },
+        },
+      },
       temperature: 0.2,
     })
 
-    const raw = resp.output_text || "{}"
+    const raw = resp.choices?.[0]?.message?.content || "{}"
+    // </CHANGE>
+
     let data
     try {
       data = JSON.parse(raw)
@@ -1164,20 +1201,33 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
           selecao: p.selecao || `Cotação ${idx + 1}`,
           ofertante: p.ofertante || "",
           cnpj_ofertante: p.cnpj_ofertante || p.cnpj || "",
-          data_cotacao: fmtBRDate(p.dataCotacao || p.data_cotacao || p.data || ""),
-          valor: fmtBRL(p.valor || p.valorBR || ""),
+          data_cotacao: p.data_cotacao || p.dataCotacao || p.data || "",
+          valor: p.valor || p.valorBR || "",
         }))
       : []
 
+    console.log("[v0] IA extraiu com sucesso:", { objeto, propostas_count: propostas.length })
     return { objeto, propostas }
   } catch (err) {
     const code = err?.status || err?.statusCode || err?.code
     const msg = String(err?.message || "").toLowerCase()
+
+    console.error("[v0] Erro na extração com IA:", {
+      code,
+      message: err?.message,
+      error: err?.error?.message || err?.error,
+    })
+
     if (code === 401 || code === "401" || msg.includes("incorrect api key") || msg.includes("invalid api key")) {
       invalidateOpenAIClient()
       throw new Error("OPENAI_KEY_INVALID")
     }
-    console.warn("[mapa] extractFromCotacoesWithAI falhou:", err?.message || err)
+
+    if (code === 400 || code === "400") {
+      throw new Error(`OPENAI_SCHEMA_ERROR: ${err?.message || "Schema inválido"}`)
+    }
+
+    console.warn("[v0] extractFromCotacoesWithAI falhou:", err?.message || err)
     return { objeto: "", propostas: [] }
   }
 }
