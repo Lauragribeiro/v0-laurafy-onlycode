@@ -1,19 +1,6 @@
 {
   "data": [
     {
-      "id": 1759510457044,
-      "titulo": "PROJETO TIC 222",
-      "codigo": "57052493",
-      "vigenciaInicio": null,
-      "vigenciaFim": null,
-      "responsavel": "Maria",
-      "status": "em_andamento",
-      "instituicao": "EDGE",
-      "coordenador": "Laura teste teste",
-      "gerente": "Maria",
-      "updatedAt": "2025-10-09T14:46:32.789Z"
-    },
-    {
       "id": 1759510456721,
       "titulo": "PROJETO TIC 222",
       "codigo": "57052493",
