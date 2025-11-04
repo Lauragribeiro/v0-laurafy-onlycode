@@ -589,6 +589,8 @@ router.post("/folha-rosto", async (req, res) => {
     }
 
     console.log("[FOLHA ROSTO] Dados para template:", docData)
+    console.log("[FOLHA ROSTO] Template path:", templatePath)
+    console.log("[FOLHA ROSTO] Template exists:", fs.existsSync(templatePath))
 
     const out = renderDocx(templatePath, docData)
     const hint = sanitizeFilename(
@@ -893,6 +895,20 @@ router.post("/mapa-cotacao", async (req, res) => {
       avisos: avisosResumo,
     }
     const headerValue = encodeHeaderPayload(headerPayload)
+
+    console.log("[MAPA COTAÇÃO] Dados para template:", {
+      instituicao: docData.instituicao,
+      termo_parceria: docData.termo_parceria,
+      codigo_projeto: docData.codigo_projeto,
+      projeto_nome: docData.projeto_nome,
+      projeto: docData.projeto,
+      natureza_disp: docData.natureza_disp,
+      rubrica: docData.rubrica,
+      objeto: docData.objeto,
+      propostas_count: docData.propostas.length,
+    })
+    console.log("[MAPA COTAÇÃO] Template path:", templatePath)
+    console.log("[MAPA COTAÇÃO] Template exists:", fs.existsSync(templatePath))
 
     const out = renderDocx(templatePath, docData)
     const hint = sanitizeFilename(body.filenameHint || `MapaCotacao_${docData.codigo_projeto}`, "mapa_cotacao")
