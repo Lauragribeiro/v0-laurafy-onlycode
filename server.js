@@ -11,6 +11,7 @@ import { dirname, join, extname } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { renderDocxBuffer } from "./src/utils/docxTemplate.js"
+import { ensureTemplatesExist } from "./src/autoCreateTemplates.js"
 
 import dayjs from "dayjs"
 import "dayjs/locale/pt-br.js"
@@ -47,6 +48,7 @@ const useLegacyMapaRoute = process.env.LEGACY_MAPA === "1"
 async function ensureBaseDirs() {
   await fsp.mkdir(DATA_DIR, { recursive: true }).catch(() => {})
   await fsp.mkdir(UPLOADS_DIR, { recursive: true }).catch(() => {})
+  await ensureTemplatesExist()
 }
 await ensureBaseDirs()
 
