@@ -1,5 +1,16 @@
 // src/autoCreateTemplates.js
-import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx"
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  AlignmentType,
+  WidthType,
+  BorderStyle,
+} from "docx"
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -16,141 +27,481 @@ const DISPENSA_DIR = path.join(TEMPLATES_DIR, "dispensa")
 
 console.log("[autoCreateTemplates] Módulo carregado")
 console.log("[autoCreateTemplates] TEMPLATES_DIR:", TEMPLATES_DIR)
-console.log("[autoCreateTemplates] FOLHA_DIR:", FOLHA_DIR)
-console.log("[autoCreateTemplates] MAPA_DIR:", MAPA_DIR)
 
-function placeholder(name) {
-  return `{${name}}`
+function createPlaceholderText(placeholder) {
+  return new TextRun({
+    text: `{{${placeholder}}}`,
+    font: "Arial",
+  })
 }
 
-function createFolhaRostoTemplate(instituicao) {
+function createTable(rows) {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 1 },
+      bottom: { style: BorderStyle.SINGLE, size: 1 },
+      left: { style: BorderStyle.SINGLE, size: 1 },
+      right: { style: BorderStyle.SINGLE, size: 1 },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+      insideVertical: { style: BorderStyle.SINGLE, size: 1 },
+    },
+    rows: rows,
+  })
+}
+
+function createFolhaRostoEdge() {
   const doc = new Document({
     sections: [
       {
         properties: {},
         children: [
           new Paragraph({
-            text: instituicao === "edge" ? "EDGE CAPITAL" : "VERTEX CAPITAL",
-            heading: HeadingLevel.HEADING_1,
+            text: "EDGE CAPITAL",
             alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
           }),
-          new Paragraph({ text: "" }),
           new Paragraph({
             text: "FOLHA DE ROSTO",
-            heading: HeadingLevel.HEADING_2,
             alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
           }),
-          new Paragraph({ text: "" }),
+
           new Paragraph({
-            children: [new TextRun({ text: "Projeto: ", bold: true }), new TextRun({ text: placeholder("projeto") })],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "CNPJ Instituição: ", bold: true }),
-              new TextRun({ text: placeholder("cnpj_instituicao") }),
-            ],
+            children: [new TextRun({ text: "Instituição Executora: " }), createPlaceholderText("instituicao")],
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [
-              new TextRun({ text: "Termo de Parceria: ", bold: true }),
-              new TextRun({ text: placeholder("termo_parceria") }),
-            ],
+            text: "CNPJ:",
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: "Rubrica: ", bold: true }), new TextRun({ text: placeholder("rubrica") })],
+            children: [new TextRun({ text: "Termo de Parceria nº: " }), createPlaceholderText("projeto_codigo")],
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [
-              new TextRun({ text: "Descrição: ", bold: true }),
-              new TextRun({ text: placeholder("descricao") }),
-            ],
+            children: [new TextRun({ text: "Projeto: " }), createPlaceholderText("projeto_nome")],
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [
-              new TextRun({ text: "Valor Total: ", bold: true }),
-              new TextRun({ text: placeholder("valor_total") }),
-            ],
+            children: [new TextRun({ text: "Prestação de Contas: " }), createPlaceholderText("pc_numero")],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            text: "Natureza de Dispêndio",
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: "Data: ", bold: true }), new TextRun({ text: placeholder("data") })],
+            children: [createPlaceholderText("rubrica")],
+            spacing: { after: 400 },
           }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "PROPOSTAS",
-            heading: HeadingLevel.HEADING_3,
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: placeholder("#propostas") })],
-          }),
+
+          createTable([
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph("Favorecido")] }),
+                new TableCell({ children: [new Paragraph("CNPJ OU CPF")] }),
+                new TableCell({ children: [new Paragraph("Nº Extrato")] }),
+              ],
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("favorecido")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("cnpj")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("n_extrato")] })] }),
+              ],
+            }),
+          ]),
+
+          new Paragraph({ text: "", spacing: { after: 400 } }),
+
+          createTable([
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph("NF/ND")] }),
+                new TableCell({ children: [new Paragraph("Data de emissão da NF/ND")] }),
+                new TableCell({ children: [new Paragraph("Data do pagamento")] }),
+                new TableCell({ children: [new Paragraph("Valor")] }),
+              ],
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("nf_recibo")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("data_emissao")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("data_pagamento")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("valor_pago")] })] }),
+              ],
+            }),
+          ]),
+
+          new Paragraph({ text: "", spacing: { after: 400 } }),
+
+          new Paragraph({ text: "● Mapa de cotação ou justificativa para dispensa" }),
+          new Paragraph({ text: "● 3 propostas" }),
+          new Paragraph({ text: "● Contrato (se houver)" }),
+          new Paragraph({ text: "● Notas fiscais ou Invoice" }),
+          new Paragraph({ text: "● Comprovante de pagamento" }),
         ],
       },
     ],
   })
+
   return doc
 }
 
-function createMapaCotacoesTemplate(instituicao) {
+function createFolhaRostoVertex() {
   const doc = new Document({
     sections: [
       {
         properties: {},
         children: [
           new Paragraph({
-            text: instituicao === "edge" ? "EDGE CAPITAL" : "VERTEX CAPITAL",
-            heading: HeadingLevel.HEADING_1,
+            text: "VERTEX - Instituto de Tecnologia e Inovação",
             alignment: AlignmentType.CENTER,
+            spacing: { after: 100 },
           }),
-          new Paragraph({ text: "" }),
           new Paragraph({
-            text: "MAPA DE COTAÇÕES",
-            heading: HeadingLevel.HEADING_2,
+            text: "Rua Melo Póvoas, 110 - Centro de Inovação do Jaraguá, Sala 113",
             alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [new TextRun({ text: "Projeto: ", bold: true }), new TextRun({ text: placeholder("projeto") })],
+            spacing: { after: 100 },
           }),
           new Paragraph({
-            children: [
-              new TextRun({ text: "CNPJ Instituição: ", bold: true }),
-              new TextRun({ text: placeholder("cnpj_instituicao") }),
-            ],
+            text: "Maceió, Alagoas",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [new TextRun({ text: "Instituição Executora: " }), createPlaceholderText("instituicao")],
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [
-              new TextRun({ text: "Termo de Parceria: ", bold: true }),
-              new TextRun({ text: placeholder("termo_parceria") }),
-            ],
+            text: "CNPJ:",
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: "Rubrica: ", bold: true }), new TextRun({ text: placeholder("rubrica") })],
+            children: [new TextRun({ text: "Termo de Parceria nº: " }), createPlaceholderText("projeto_codigo")],
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [
-              new TextRun({ text: "Descrição: ", bold: true }),
-              new TextRun({ text: placeholder("descricao") }),
-            ],
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "COTAÇÕES",
-            heading: HeadingLevel.HEADING_3,
+            children: [new TextRun({ text: "Projeto: " }), createPlaceholderText("projeto_nome")],
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: placeholder("#cotacoes") })],
+            children: [new TextRun({ text: "Prestação de Contas: " }), createPlaceholderText("pc_numero")],
+            spacing: { after: 400 },
           }),
-          new Paragraph({ text: "" }),
+
           new Paragraph({
-            text: "AVISOS",
-            heading: HeadingLevel.HEADING_3,
+            text: "Natureza de Dispêndio",
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: placeholder("#cotacoesAvisos") })],
+            children: [createPlaceholderText("rubrica")],
+            spacing: { after: 400 },
+          }),
+
+          createTable([
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph("Favorecido")] }),
+                new TableCell({ children: [new Paragraph("CNPJ OU CPF")] }),
+                new TableCell({ children: [new Paragraph("Nº Extrato")] }),
+              ],
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("favorecido")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("cnpj")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("n_extrato")] })] }),
+              ],
+            }),
+          ]),
+
+          new Paragraph({ text: "", spacing: { after: 400 } }),
+
+          createTable([
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph("NF/ND")] }),
+                new TableCell({ children: [new Paragraph("Data de emissão da NF/ND")] }),
+                new TableCell({ children: [new Paragraph("Data do pagamento")] }),
+                new TableCell({ children: [new Paragraph("Valor")] }),
+              ],
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("nf_recibo")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("data_emissao")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("data_pagamento")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("valor_pago")] })] }),
+              ],
+            }),
+          ]),
+
+          new Paragraph({ text: "", spacing: { after: 400 } }),
+
+          new Paragraph({ text: "● Mapa de cotação ou justificativa para dispensa" }),
+          new Paragraph({ text: "● 3 propostas" }),
+          new Paragraph({ text: "● Contrato (se houver)" }),
+          new Paragraph({ text: "● Notas fiscais ou Invoice" }),
+          new Paragraph({ text: "● Comprovante de pagamento" }),
+        ],
+      },
+    ],
+  })
+
+  return doc
+}
+
+function createMapaCotacaoEdge() {
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({
+            text: "MAPA DE COTAÇÃO",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [new TextRun({ text: "Instituição Executora: " }), createPlaceholderText("instituicao")],
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            text: "CNPJ:",
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: "Termo de Parceria nº: " }), createPlaceholderText("termo_parceria")],
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: "Projeto: " }), createPlaceholderText("projeto_nome")],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [new TextRun({ text: "Natureza de Dispêndio: " }), createPlaceholderText("natureza_disp")],
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "Objeto da cotação",
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [createPlaceholderText("objeto")],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            text: "Propostas",
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "{{#propostas}}",
+            spacing: { after: 0 },
+          }),
+
+          createTable([
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph("SELEÇÃO")] }),
+                new TableCell({ children: [new Paragraph("OFERTANTE")] }),
+                new TableCell({ children: [new Paragraph("CNPJ / CPF")] }),
+                new TableCell({ children: [new Paragraph("DATA DA COTAÇÃO")] }),
+                new TableCell({ children: [new Paragraph("VALOR")] }),
+              ],
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("selecao")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("ofertante")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("cnpj_ofertante")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("data_cotacao")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("valor")] })] }),
+              ],
+            }),
+          ]),
+
+          new Paragraph({
+            text: "{{/propostas}}",
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [new TextRun({ text: "Data da Aquisição: " }), createPlaceholderText("data_aquisicao")],
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "Justificativa da seleção",
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [createPlaceholderText("justificativa")],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [createPlaceholderText("local_data")],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            text: "_______________________________",
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            children: [createPlaceholderText("coordenador_nome")],
           }),
         ],
       },
     ],
   })
+
+  return doc
+}
+
+function createMapaCotacaoVertex() {
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({
+            text: "VERTEX - Instituto de Tecnologia e Inovação",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            text: "Rua Melo Póvoas, 110 - Centro de Inovação do Jaraguá, Sala 113",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            text: "Maceió, Alagoas",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            text: "MAPA DE COTAÇÃO",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [new TextRun({ text: "Instituição Executora: " }), createPlaceholderText("instituicao")],
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            text: "CNPJ:",
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: "Termo de Parceria nº: " }), createPlaceholderText("codigo_projeto")],
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: "Projeto: " }), createPlaceholderText("projeto")],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [new TextRun({ text: "Natureza de Dispêndio: " }), createPlaceholderText("rubrica")],
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "Objeto da cotação",
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [createPlaceholderText("objeto")],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            text: "Propostas",
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "{{#propostas}}",
+            spacing: { after: 0 },
+          }),
+
+          createTable([
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph("SELEÇÃO")] }),
+                new TableCell({ children: [new Paragraph("OFERTANTE")] }),
+                new TableCell({ children: [new Paragraph("CNPJ / CPF")] }),
+                new TableCell({ children: [new Paragraph("DATA DA COTAÇÃO")] }),
+                new TableCell({ children: [new Paragraph("VALOR")] }),
+              ],
+            }),
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("selecao")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("ofertante")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("cnpj_ofertante")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("data_cotacao")] })] }),
+                new TableCell({ children: [new Paragraph({ children: [createPlaceholderText("valor")] })] }),
+              ],
+            }),
+          ]),
+
+          new Paragraph({
+            text: "{{/propostas}}",
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [new TextRun({ text: "Data da Aquisição: " }), createPlaceholderText("data_aquisicao")],
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "Justificativa da seleção",
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [createPlaceholderText("justificativa")],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            children: [
+              createPlaceholderText("localidade"),
+              new TextRun(", "),
+              createPlaceholderText("dia"),
+              new TextRun(" de "),
+              createPlaceholderText("mes"),
+              new TextRun(" de "),
+              createPlaceholderText("ano"),
+            ],
+            spacing: { after: 400 },
+          }),
+
+          new Paragraph({
+            text: "_______________________________",
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            children: [createPlaceholderText("coordenador")],
+          }),
+        ],
+      },
+    ],
+  })
+
   return doc
 }
 
@@ -162,45 +513,33 @@ function createJustificativaTemplate() {
         children: [
           new Paragraph({
             text: "JUSTIFICATIVA DE DISPENSA DE LICITAÇÃO",
-            heading: HeadingLevel.HEADING_1,
             alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [new TextRun({ text: "Projeto: ", bold: true }), new TextRun({ text: placeholder("projeto") })],
+            spacing: { after: 400 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: "Rubrica: ", bold: true }), new TextRun({ text: placeholder("rubrica") })],
+            children: [new TextRun({ text: "Projeto: " }), createPlaceholderText("projeto")],
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [
-              new TextRun({ text: "Descrição: ", bold: true }),
-              new TextRun({ text: placeholder("descricao") }),
-            ],
+            children: [new TextRun({ text: "Rubrica: " }), createPlaceholderText("rubrica")],
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: "Valor: ", bold: true }), new TextRun({ text: placeholder("valor") })],
+            children: [new TextRun({ text: "Objeto: " }), createPlaceholderText("objeto")],
+            spacing: { after: 400 },
           }),
-          new Paragraph({ text: "" }),
           new Paragraph({
             text: "JUSTIFICATIVA",
-            heading: HeadingLevel.HEADING_2,
+            spacing: { after: 200 },
           }),
           new Paragraph({
-            children: [new TextRun({ text: placeholder("justificativa") })],
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "OBJETO",
-            heading: HeadingLevel.HEADING_2,
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: placeholder("objeto") })],
+            children: [createPlaceholderText("justificativa")],
           }),
         ],
       },
     ],
   })
+
   return doc
 }
 
@@ -244,9 +583,9 @@ function templateExists(filePath, fileName) {
 
 export async function ensureTemplatesExist() {
   console.log("[autoCreateTemplates] ========================================")
-  console.log("[autoCreateTemplates] Iniciando verificação de templates...")
+  console.log("[autoCreateTemplates] 🚀 Iniciando verificação de templates...")
   console.log("[autoCreateTemplates] ========================================")
-  console.log(`[autoCreateTemplates] Diretório base: ${TEMPLATES_DIR}`)
+  console.log(`[autoCreateTemplates] 📁 Diretório base: ${TEMPLATES_DIR}`)
 
   const dirs = [TEMPLATES_DIR, FOLHA_DIR, MAPA_DIR, DISPENSA_DIR]
   for (const dir of dirs) {
@@ -257,6 +596,7 @@ export async function ensureTemplatesExist() {
         console.log(`[autoCreateTemplates] ✅ Diretório criado: ${dir}`)
       } catch (error) {
         console.error(`[autoCreateTemplates] ❌ Erro ao criar diretório ${dir}:`, error.message)
+        return 0
       }
     } else {
       console.log(`[autoCreateTemplates] ✓ Diretório existe: ${dir}`)
@@ -264,10 +604,10 @@ export async function ensureTemplatesExist() {
   }
 
   const templates = [
-    { dir: FOLHA_DIR, name: "folha_rosto_edge.docx", create: () => createFolhaRostoTemplate("edge") },
-    { dir: FOLHA_DIR, name: "folha_rosto_vertex.docx", create: () => createFolhaRostoTemplate("vertex") },
-    { dir: MAPA_DIR, name: "mapa_edge.docx", create: () => createMapaCotacoesTemplate("edge") },
-    { dir: MAPA_DIR, name: "mapa_vertex.docx", create: () => createMapaCotacoesTemplate("vertex") },
+    { dir: FOLHA_DIR, name: "folha_rosto_edge.docx", create: () => createFolhaRostoEdge() },
+    { dir: FOLHA_DIR, name: "folha_rosto_vertex.docx", create: () => createFolhaRostoVertex() },
+    { dir: MAPA_DIR, name: "mapa_edge.docx", create: () => createMapaCotacaoEdge() },
+    { dir: MAPA_DIR, name: "mapa_vertex.docx", create: () => createMapaCotacaoVertex() },
     { dir: DISPENSA_DIR, name: "justificativa_dispensa.docx", create: () => createJustificativaTemplate() },
   ]
 
@@ -280,7 +620,7 @@ export async function ensureTemplatesExist() {
     const fullPath = path.join(template.dir, template.name)
 
     console.log(`[autoCreateTemplates] ----------------------------------------`)
-    console.log(`[autoCreateTemplates] Verificando template ${checked}/${templates.length}: ${template.name}`)
+    console.log(`[autoCreateTemplates] 🔍 Verificando template ${checked}/${templates.length}: ${template.name}`)
 
     if (!templateExists(template.dir, template.name)) {
       console.log(`[autoCreateTemplates] ⚠️  Template ausente, criando...`)
@@ -307,11 +647,26 @@ export async function ensureTemplatesExist() {
   }
 
   console.log(`[autoCreateTemplates] ========================================`)
-  console.log(`[autoCreateTemplates] Verificação concluída:`)
+  console.log(`[autoCreateTemplates] 📊 Verificação concluída:`)
   console.log(`[autoCreateTemplates]   - Templates verificados: ${checked}`)
   console.log(`[autoCreateTemplates]   - Templates criados: ${created}`)
   console.log(`[autoCreateTemplates]   - Falhas: ${failed}`)
   console.log(`[autoCreateTemplates] ========================================`)
+
+  console.log(`[autoCreateTemplates] 📋 Listando templates críticos:`)
+  const criticalTemplates = [
+    path.join(FOLHA_DIR, "folha_rosto_edge.docx"),
+    path.join(FOLHA_DIR, "folha_rosto_vertex.docx"),
+    path.join(MAPA_DIR, "mapa_edge.docx"),
+    path.join(MAPA_DIR, "mapa_vertex.docx"),
+  ]
+
+  for (const templatePath of criticalTemplates) {
+    const exists = fs.existsSync(templatePath)
+    const status = exists ? "✅ EXISTE" : "❌ AUSENTE"
+    const size = exists ? `(${fs.statSync(templatePath).size} bytes)` : ""
+    console.log(`[autoCreateTemplates]   ${status} ${path.basename(templatePath)} ${size}`)
+  }
 
   if (created > 0) {
     console.log(`[autoCreateTemplates] ✅ ${created} template(s) criado(s) com sucesso`)
@@ -320,6 +675,8 @@ export async function ensureTemplatesExist() {
   if (failed > 0) {
     console.error(`[autoCreateTemplates] ⚠️  ${failed} template(s) falharam ao ser criados`)
   }
+
+  console.log(`[autoCreateTemplates] ========================================`)
 
   return created
 }
