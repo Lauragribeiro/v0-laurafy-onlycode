@@ -1341,7 +1341,7 @@ app.post("/api/generate/folha-rosto", (req, res) => {
 if (useLegacyMapaRoute) {
   console.warn("[mapa] LEGACY_MAPA=1 habilitado — utilizando rota legada /api/generate/mapa-cotacao.")
   app.post("/api/generate/mapa-cotacao", async (req, res) => {
-    console.log("[v0] Mapa de cotação endpoint called")
+    console.log("[v0] ========== MAPA DE COTAÇÃO ENDPOINT ==========")
     console.log("[v0] Request body keys:", Object.keys(req.body || {}))
 
     const warnings = []
@@ -1368,36 +1368,103 @@ if (useLegacyMapaRoute) {
 
       const frontPropsRaw = Array.isArray(b.propostas) ? b.propostas : []
       console.log("[v0] Front propostas count:", frontPropsRaw.length)
+      console.log("[v0] Front propostas:", JSON.stringify(frontPropsRaw, null, 2))
 
       let propostas = normalizePropostas(frontPropsRaw)
       console.log("[v0] Normalized propostas count:", propostas.length)
 
       let objeto = String(b.objeto || b.objetoDescricao || b.processo?.objeto || "")
-      console.log("[v0] Objeto inicial:", objeto ? "present" : "empty")
+      console.log("[v0] Objeto inicial:", objeto ? objeto : "(empty)")
 
       if (objeto && rubrica && objeto.trim().toLowerCase() === rubrica.trim().toLowerCase()) objeto = ""
 
       const cotacoesInput =
         (Array.isArray(b?.docs?.cotacoes) ? b.docs.cotacoes : null) ?? (Array.isArray(b?.cotacoes) ? b.cotacoes : [])
+
       console.log("[v0] Cotacoes input count:", cotacoesInput.length)
+      console.log(
+        "[v0] Cotacoes input structure:",
+        cotacoesInput.map((c) => ({
+          name: c?.name || c?.filename || c?.key,
+          hasData: !!c?.data,
+          hasUrl: !!c?.url,
+          hasPath: !!c?.path,
+        })),
+      )
 
-      // Substituir aqui a chamada `ensureCotacoesText` pela nova `extractCotacoesFromFiles`
-      const { objeto: extractedObjeto, propostas: extractedPropostas } = await extractCotacoesFromFiles(cotacoesInput, {
-        instituicao: b.instituicao || "",
-        rubrica,
-      })
+      if (cotacoesInput.length > 0) {
+        console.log("[v0] Tentando extrair dados de", cotacoesInput.length, "cotações...")
 
-      if (extractedObjeto) objeto = extractedObjeto
-      if (extractedPropostas && extractedPropostas.length > 0) propostas = extractedPropostas
+        try {
+          const { objeto: extractedObjeto, propostas: extractedPropostas } = await extractCotacoesFromFiles(
+            cotacoesInput,
+            {
+              instituicao: b.instituicao || "",
+              rubrica,
+            },
+          )
+
+          console.log("[v0] Extração concluída:")
+          console.log("[v0] - Objeto extraído:", extractedObjeto || "(vazio)")
+          console.log("[v0] - Propostas extraídas:", extractedPropostas?.length || 0)
+
+          if (extractedObjeto) objeto = extractedObjeto
+
+          if (extractedPropostas && extractedPropostas.length > 0) {
+            propostas = extractedPropostas
+            console.log("[v0] Usando propostas extraídas")
+          } else {
+            console.log("[v0] Nenhuma proposta extraída, criando propostas vazias para cada cotação")
+            propostas = cotacoesInput.map((cot, idx) => ({
+              selecao: `Cotação ${idx + 1}`,
+              ofertante: cot?.name || cot?.filename || `Fornecedor ${idx + 1}`,
+              cnpj_ofertante: "",
+              data_cotacao: "",
+              valor: "",
+            }))
+            warnings.push(
+              `Criadas ${propostas.length} propostas vazias. Preencha os dados manualmente ou verifique os arquivos de cotação.`,
+            )
+          }
+        } catch (extractError) {
+          console.error("[v0] Erro ao extrair cotações:", extractError)
+          warnings.push(`Erro ao processar cotações: ${extractError.message}`)
+
+          if (propostas.length === 0) {
+            console.log("[v0] Criando propostas vazias após erro de extração")
+            propostas = cotacoesInput.map((cot, idx) => ({
+              selecao: `Cotação ${idx + 1}`,
+              ofertante: cot?.name || cot?.filename || `Fornecedor ${idx + 1}`,
+              cnpj_ofertante: "",
+              data_cotacao: "",
+              valor: "",
+            }))
+          }
+        }
+      }
 
       if (!propostas || propostas.length === 0) {
         if (cotacoesInput.length === 0) {
           warnings.push("Nenhuma cotação anexada.")
+          console.log("[v0] Nenhuma cotação anexada, criando 3 propostas vazias padrão")
         } else {
           warnings.push("Nenhuma proposta identificada nas cotações.")
+          console.log("[v0] Cotações anexadas mas nenhuma proposta identificada")
+        }
+
+        propostas = []
+        for (let i = 0; i < Math.max(3, cotacoesInput.length); i++) {
+          propostas.push({
+            selecao: `Cotação ${i + 1}`,
+            ofertante: "",
+            cnpj_ofertante: "",
+            data_cotacao: "",
+            valor: "",
+          })
         }
       }
 
+      console.log("[v0] Propostas finais antes de MIN_ROWS:", propostas.length)
       const MIN_ROWS = 3
       while (propostas.length < MIN_ROWS) {
         propostas.push({

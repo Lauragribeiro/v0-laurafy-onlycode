@@ -509,13 +509,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ================== PARSE IMEDIATO (envia o File para /api/parse-docs) ================== */
-  async function parseDocsImmediate({ nf = null, oficio = null, ordem = null, cotacoes = [] } = {}) {
-    const hasAny = nf || oficio || ordem || (cotacoes && cotacoes.length)
+  async function parseDocsImmediate({ nf = null, ofidio = null, ordem = null, cotacoes = [] } = {}) {
+    const hasAny = nf || ofidio || ordem || (cotacoes && cotacoes.length)
     if (!hasAny) return
 
     const fd = new FormData()
     if (nf) fd.append("nf", nf)
-    if (oficio) fd.append("oficio", oficio)
+    if (ofidio) fd.append("oficio", ofidio)
     if (ordem) fd.append("ordem", ordem)
     ;(cotacoes || []).forEach((f) => fd.append("cotacoes", f))
 
@@ -2317,15 +2317,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     })
 
-    // roda ao carregar e também após pequenos atrasos (caso a tabela seja renderizada depois)
+    // runs on load and also after small delays (in case the table is rendered later)
     const boot = () => hydrateAll()
     document.addEventListener("DOMContentLoaded", boot)
     if (document.readyState === "interactive" || document.readyState === "complete") boot()
-    // tenta novamente após render assíncrono
+    // try again after async render
     setTimeout(boot, 300)
     setTimeout(boot, 1000)
   })()
-  // === RESET PC EDIT (limpa qualquer edição anterior sem quebrar nada) ===
+  // === RESET PC EDIT (cleans up any prior edits without breaking things) ===
   ;(function resetPcEditOnce() {
     try {
       document.querySelectorAll('td[contenteditable="true"]').forEach((td) => {
@@ -2338,16 +2338,16 @@ document.addEventListener("DOMContentLoaded", () => {
         delete td.dataset.prevText
         td.removeAttribute("data-pc-edit")
       })
-      document.querySelectorAll(".pc-edit-actions").forEach((el) => el.remove()) // remove só nosso wrap (não mexe na lixeira)
+      document.querySelectorAll(".pc-edit-actions").forEach((el) => el.remove()) // remove only our wrap (don't touch trash button)
     } catch (e) {
-      /* silencioso */
+      /* silent */
     }
   })()
 })
 
 /* ===================== FOLHA DE ROSTO E MAPA DE COTAÇÃO  ===================== */
 ;(() => {
-  // ---------- helpers básicos ----------
+  // ---------- basic helpers ----------
   function S(v) {
     return v == null ? "" : String(v)
   }
@@ -2406,12 +2406,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function pickCotacoesFromRow(row) {
     const out = []
 
-    // 1) estrutura "canônica"
+    // 1) "canonical" structure
     if (Array.isArray(row?.docs?.cotacoes)) {
       for (const c of row.docs.cotacoes) out.push(c)
     }
 
-    // 2) estruturas alternativas comuns: row.documentacao (array de arquivos)
+    // 2) alternative common structures: row.documentacao (array of files)
     const docArrs = [row?.documentacao, row?.documentacao?.arquivos, row?.docs, row?.arquivos, row?.files].filter(
       Array.isArray,
     )
@@ -2425,7 +2425,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (looksLikeCot) out.push(f)
       }
     }
-    // mapeia p/ formato fino
+    // map to fine format
     return out.map((c) => ({
       name: S(c.name || c.filename || c.fileName || "cotacao.pdf"),
       text: S(c.text || ""),
@@ -2444,7 +2444,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }))
   }
 
-  // Normaliza propostas p/ o formato final do DOCX:
+  // Normalize proposals to final DOCX format:
   // [{ selecao, ofertante, cnpj_ofertante, data_cotacao, valor }]
   function normalizaPropostas(raw) {
     const list = Array.isArray(raw) ? raw : []
@@ -2485,7 +2485,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!jaTemSelecionada && menorIdx >= 0 && parsed[menorIdx]) parsed[menorIdx].selecao = "SELECIONADA"
 
-    // filtra linhas totalmente vazias
+    // filter out totally empty rows
     return parsed.filter((p) => p.ofertante || p.cnpj_ofertante || p.data_cotacao || p.valor)
   }
 
@@ -2506,7 +2506,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const decoded = decodeBase64Url(encoded)
       return decoded ? JSON.parse(decoded) : null
     } catch (err) {
-      console.warn("[docfin] não foi possível decodificar o cabeçalho do mapa:", err)
+      console.warn("[docfin] not able to decode map header:", err)
       return null
     }
   }
@@ -2546,9 +2546,9 @@ document.addEventListener("DOMContentLoaded", () => {
       while (attempt < maxAttempts) {
         const loadingMessage = isMapa
           ? attempt === 0
-            ? "Gerando mapa de cotação…"
-            : `Reprocessando mapa de cotação (${attempt + 1}/${maxAttempts})…`
-          : "Gerando documento…"
+            ? "Generating quote map…"
+            : `Reprocessing quote map (${attempt + 1}/${maxAttempts})…`
+          : "Generating document…"
 
         let res
         try {
@@ -2559,8 +2559,8 @@ document.addEventListener("DOMContentLoaded", () => {
             loadingMessage,
           })
         } catch (e) {
-          console.error("[docfin] Falha de rede:", e)
-          alert("Não consegui conectar ao servidor. Veja o console.")
+          console.error("[docfin] Network failure:", e)
+          alert("Could not connect to server. Check console.")
           reject(e)
           return
         }
@@ -2568,7 +2568,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!res.ok) {
           const txt = await res.text().catch(() => "")
           console.error("[docfin] HTTP", res.status, txt)
-          alert(`Erro ${res.status} ao gerar documento.\n${txt || "(sem detalhes)"}`)
+          alert(`Error ${res.status} generating document.\n${txt || "(no details)"}`)
           reject(new Error(`HTTP ${res.status}`))
           return
         }
@@ -2583,7 +2583,7 @@ document.addEventListener("DOMContentLoaded", () => {
           isMapa && attempt + 1 < maxAttempts && statusHeader && statusHeader.toLowerCase() !== "complete"
 
         if (shouldRetry) {
-          console.warn(`(mapa) tentativa ${attempt + 1} incompleta`, details)
+          console.warn(`(mapa) attempt ${attempt + 1} incomplete`, details)
           attempt += 1
           continue
         }
@@ -2596,15 +2596,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (!finalArrayBuffer) {
-        alert("Não foi possível gerar o documento após múltiplas tentativas. Revise os dados e tente novamente.")
-        reject(new Error("Não foi possível gerar o documento após múltiplas tentativas."))
+        alert("Could not generate document after multiple attempts. Please review the data and try again.")
+        reject(new Error("Could not generate document after multiple attempts."))
         return
       }
 
       const dispo = finalDisposition || ""
       const m = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(dispo)
       const suggested = m ? decodeURIComponent(m[1]) : null
-      const filename = sanitize(suggested || filenameFallback || "documento")
+      const filename = sanitize(suggested || filenameFallback || "document")
 
       const blob = new Blob([finalArrayBuffer], {
         type: mime || "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -2715,12 +2715,34 @@ document.addEventListener("DOMContentLoaded", () => {
     const cotacoesSlim = pickCotacoesFromRow(row)
     const cotacoesUploads = Array.isArray(row?.docs?.cotacoes) ? row.docs.cotacoes : []
 
+    console.log("[v0] ========== BUILD PAYLOAD MAPA ==========")
     console.log("[v0] buildPayloadMapa - Dados da linha:", {
       favorecido: row.favorecido,
       valor: row.valor,
       cotacoes_count: cotacoesSlim.length,
       cotacoes_uploads_count: cotacoesUploads.length,
+      row_keys: Object.keys(row),
     })
+
+    console.log(
+      "[v0] Cotações slim:",
+      cotacoesSlim.map((c) => ({
+        name: c.name,
+        hasData: !!c.data,
+        dataLength: c.data?.length,
+        type: c.type,
+      })),
+    )
+
+    console.log(
+      "[v0] Cotações uploads:",
+      cotacoesUploads.map((c) => ({
+        filename: c.filename,
+        key: c.key,
+        url: c.url,
+        name: c.name,
+      })),
+    )
 
     const cotacaoFileNames = cotacoesUploads
       .map((entry) => {
@@ -2750,6 +2772,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     console.log("[v0] Propostas encontradas antes de normalizar:", propostasEstr.length)
+    console.log("[v0] Propostas estruturadas:", JSON.stringify(propostasEstr, null, 2))
 
     propostasEstr = propostasEstr
       .map((p, idx) => {
@@ -2768,6 +2791,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const propostas = normalizaPropostas(propostasEstr)
 
     console.log("[v0] Propostas após normalização:", propostas.length)
+    console.log("[v0] Propostas normalizadas:", JSON.stringify(propostas, null, 2))
 
     const dtPg = row.dataPagamento || ""
     const baseDate = dtPg ? new Date(dtPg) : new Date()
@@ -2834,18 +2858,30 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     payload.propostas = propostas
-    if (cotacaoFileNames.length) payload.cotacoes = cotacaoFileNames
+
+    if (cotacoesSlim.length > 0) {
+      payload.docs = { cotacoes: cotacoesSlim }
+      console.log("[v0] Enviando cotações no payload.docs.cotacoes:", cotacoesSlim.length)
+    }
+
+    if (cotacaoFileNames.length) {
+      payload.cotacoes = cotacaoFileNames
+      console.log("[v0] Enviando nomes de arquivos no payload.cotacoes:", cotacaoFileNames)
+    }
+
     if (Array.isArray(row.cotacoes_avisos) && row.cotacoes_avisos.length) {
       payload.cotacoesAvisos = cloneAvisos(row.cotacoes_avisos)
     }
 
     console.log("[v0] buildPayloadMapa - Payload final:", {
       propostasLen: propostas.length,
-      cotacoesNoRow: cotacoesSlim.map((c) => c.name),
+      hasDocs: !!payload.docs,
+      cotacoesInDocs: payload.docs?.cotacoes?.length || 0,
       cotacoesFileNames: cotacaoFileNames,
       cnpj_instituicao: payload.cnpj_instituicao,
       termo_parceria: payload.termo_parceria,
     })
+    console.log("[v0] ========== FIM BUILD PAYLOAD MAPA ==========")
 
     return { payload }
   }
@@ -2936,7 +2972,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (match) return match
       }
     } catch (err) {
-      console.error("[docfin] Erro ao procurar ação:", err)
+      console.error("[docfin] Error finding action:", err)
     }
     return null
   }
@@ -2971,7 +3007,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return window.JSZip
       }
     } catch (err) {
-      console.warn("[docfin] falha ao carregar JSZip dinamicamente:", err)
+      console.warn("[docfin] failed to load JSZip dynamically:", err)
     }
     return window.JSZip || null
   }
@@ -2979,7 +3015,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function normalizeUploadEntry(entry) {
     if (!entry) return null
     if (typeof entry === "string") {
-      const name = entry.split(/[\\/]/).pop() || "documento"
+      const name = entry.split(/[\\/]/).pop() || "document"
       return normalizeUploadEntry({ url: entry, originalname: name })
     }
     const obj = { ...entry }
@@ -2992,7 +3028,7 @@ document.addEventListener("DOMContentLoaded", () => {
       url = `/uploads/${String(obj.filename).replace(/^\/+/, "")}`
     }
     if (!url) return null
-    const originalname = obj.originalname || obj.name || obj.filename || obj.fileName || "documento"
+    const originalname = obj.originalname || obj.name || obj.filename || obj.fileName || "document"
     const filename = obj.filename || obj.key || null
     return { url, originalname, filename }
   }
@@ -3006,7 +3042,7 @@ document.addEventListener("DOMContentLoaded", () => {
         kind: "upload",
         order,
         disabled: true,
-        reason: "Arquivo não disponível.",
+        reason: "File not available.",
         desc: description || "",
       })
       return
@@ -3062,7 +3098,7 @@ document.addEventListener("DOMContentLoaded", () => {
       filename: `${sanitize(folha.payload?.filenameHint, "folha_de_rosto")}.docx`,
       disabled: !!folha.error,
       reason: folha.error || "",
-      desc: "Gerar automaticamente a partir dos dados do processo.",
+      desc: "Generate automatically from process data.",
     })
     const mapa = buildPayloadMapa()
     options.push({
@@ -3075,7 +3111,7 @@ document.addEventListener("DOMContentLoaded", () => {
       filename: `${sanitize(mapa.payload?.filenameHint, "mapa_cotacao")}.docx`,
       disabled: !!mapa.error,
       reason: mapa.error || "",
-      desc: "Inclui os dados estruturados das cotações.",
+      desc: "Includes structured quote data.",
     })
     const just = buildPayloadJustificativa()
     options.push({
@@ -3088,7 +3124,7 @@ document.addEventListener("DOMContentLoaded", () => {
       filename: `${sanitize(just.payload?.filenameHint, "justificativa_dispensa")}.docx`,
       disabled: !!just.error,
       reason: just.error || "",
-      desc: "Documento textual com a justificativa do processo.",
+      desc: "Text document with the process justification.",
     })
 
     return options.sort((a, b) => (a.order || 0) - (b.order || 0))
@@ -3129,7 +3165,7 @@ document.addEventListener("DOMContentLoaded", () => {
       content.className = "zip-option-content"
       const title = document.createElement("span")
       title.className = "zip-option-title"
-      title.textContent = opt.label || `Opção ${index + 1}`
+      title.textContent = opt.label || `Option ${index + 1}`
       content.appendChild(title)
       if (opt.desc) {
         const desc = document.createElement("span")
@@ -3153,7 +3189,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function openZipModal(row) {
     if (!zipModal || !zipOptionsEl || !zipConfirm) {
-      alert("Modal de download indisponível no momento.")
+      alert("Download modal unavailable at the moment.")
       return
     }
     const options = buildZipOptions(row || {})
@@ -3161,16 +3197,16 @@ document.addEventListener("DOMContentLoaded", () => {
     zipRowRef = row || null
     const hasSelectable = renderZipOptions(options)
     if (zipEmpty) zipEmpty.hidden = options.length > 0
-    if (zipFeedback) zipFeedback.textContent = options.length ? "" : "Nenhum documento disponível."
+    if (zipFeedback) zipFeedback.textContent = options.length ? "" : "No documents available."
     zipConfirm.disabled = !hasSelectable
     if (zipModal.showModal) zipModal.showModal()
     else zipModal.setAttribute("open", "")
   }
 
   function sanitizeZipFilename(row) {
-    const projCode = window.currentProject?.codigo || window.currentProject?.id || "projeto"
-    const pc = row?.pcNumero || row?.id || row?.favorecido || "documentos"
-    return `${sanitize(`Documentos_${projCode}_${pc}`, "documentos")}.zip`
+    const projCode = window.currentProject?.codigo || window.currentProject?.id || "project"
+    const pc = row?.pcNumero || row?.id || row?.favorecido || "documents"
+    return `${sanitize(`Documents_${projCode}_${pc}`, "documents")}.zip`
   }
 
   function closeZipModal() {
@@ -3185,22 +3221,22 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!zipOptionsEl || !zipConfirm || !zipFeedback) return
     const checked = Array.from(zipOptionsEl.querySelectorAll('input[type="checkbox"]:checked')).map((el) => el.value)
     if (!checked.length) {
-      zipFeedback.textContent = "Selecione ao menos um documento."
+      zipFeedback.textContent = "Select at least one document."
       zipConfirm.disabled = false
       return
     }
     const jszipCtor = await ensureJSZip()
     if (!jszipCtor) {
-      zipFeedback.textContent = "Não foi possível carregar a biblioteca de compactação."
+      zipFeedback.textContent = "Could not load compression library."
       return
     }
     const row = zipRowRef || getSelectedRowFromModal()
     if (!row) {
-      zipFeedback.textContent = "Nenhum processo selecionado."
+      zipFeedback.textContent = "No process selected."
       return
     }
     zipConfirm.disabled = true
-    zipFeedback.textContent = "Reunindo documentos..."
+    zipFeedback.textContent = "Gathering documents..."
     try {
       const zip = new jszipCtor()
       const usedNames = new Set()
@@ -3208,17 +3244,17 @@ document.addEventListener("DOMContentLoaded", () => {
       for (const opt of selected) {
         if (opt.kind === "upload") {
           const file = opt.file
-          if (!file || !file.url) throw new Error(`Arquivo indisponível para ${opt.label}`)
-          zipFeedback.textContent = `Baixando ${opt.label}...`
+          if (!file || !file.url) throw new Error(`File unavailable for ${opt.label}`)
+          zipFeedback.textContent = `Downloading ${opt.label}...`
           const res = await fetch(file.url)
           if (!res.ok) throw new Error(`${opt.label}: HTTP ${res.status}`)
           const buffer = await res.arrayBuffer()
-          const base = sanitize(file.originalname || opt.label || "documento", "documento")
+          const base = sanitize(file.originalname || opt.label || "document", "document")
           const name = uniqueZipName(base, usedNames)
           zip.file(name, buffer)
         } else if (opt.kind === "generate") {
-          if (!opt.payload) throw new Error(opt.reason || `Dados insuficientes para ${opt.label}`)
-          zipFeedback.textContent = `Gerando ${opt.label}...`
+          if (!opt.payload) throw new Error(opt.reason || `Insufficient data for ${opt.label}`)
+          zipFeedback.textContent = `Generating ${opt.label}...`
           const res = await fetch(opt.endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -3229,12 +3265,12 @@ document.addEventListener("DOMContentLoaded", () => {
             throw new Error(`${opt.label}: HTTP ${res.status} ${txt}`)
           }
           const buffer = await res.arrayBuffer()
-          const base = sanitize(opt.filename || `${opt.id}.docx`, opt.id || "documento")
+          const base = sanitize(opt.filename || `${opt.id}.docx`, opt.id || "document")
           const name = uniqueZipName(base, usedNames)
           zip.file(name, buffer)
         }
       }
-      zipFeedback.textContent = "Compactando..."
+      zipFeedback.textContent = "Compressing..."
       const blob = await zip.generateAsync({ type: "blob" })
       const zipName = sanitizeZipFilename(row)
       const link = document.createElement("a")
@@ -3248,8 +3284,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }, 0)
       closeZipModal()
     } catch (err) {
-      console.error("[docfin] erro ao montar ZIP:", err)
-      zipFeedback.textContent = `Erro ao gerar o ZIP: ${err?.message || err}`
+      console.error("[docfin] error assembling ZIP:", err)
+      zipFeedback.textContent = `Error generating ZIP: ${err?.message || err}`
       zipConfirm.disabled = false
     }
   }
@@ -3297,7 +3333,7 @@ document.addEventListener("DOMContentLoaded", () => {
       event.preventDefault()
       const row = getSelectedRowFromModal()
       if (!row) {
-        alert("Selecione um processo de compra para baixar os documentos.")
+        alert("Please select a purchase process to download documents.")
         return
       }
       openZipModal(row)
@@ -3305,7 +3341,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function uniqueZipName(name, used) {
-    const clean = name || "documento"
+    const clean = name || "document"
     if (!used.has(clean)) {
       used.add(clean)
       return clean
@@ -3375,7 +3411,7 @@ document.addEventListener("DOMContentLoaded", () => {
     true,
   )
 
-  // ---------- diagnóstico ----------
+  // ---------- diagnostics ----------
   window.generateFolhaNow = async () => {
     const { payload, error } = buildPayloadFolha()
     if (error) {
@@ -3430,8 +3466,8 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         await handler()
       } catch (err) {
-        console.error("[docfin] erro ao gerar documento", err)
-        alert("Não foi possível gerar o documento. Veja o console para detalhes.")
+        console.error("[docfin] error generating document", err)
+        alert("Could not generate document. See console for details.")
       }
     })
   }
@@ -3459,7 +3495,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const folhaFound = !!document.querySelector(FOLHA_SELECTORS.join(", "))
     const mapaFound = !!document.querySelector(MAPA_SELECTORS.join(", "))
     const justFound = !!document.querySelector(JUST_SELECTORS.join(", "))
-    console.log("[docfin] botões encontrados:", {
+    console.log("[docfin] buttons found:", {
       folhaFound,
       mapaFound,
       justFound,
@@ -3469,5 +3505,5 @@ document.addEventListener("DOMContentLoaded", () => {
     })
   })
 
-  console.log("[docfin] bloco de ações carregado.")
+  console.log("[docfin] action block loaded.")
 })()()
