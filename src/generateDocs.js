@@ -573,10 +573,12 @@ router.post("/folha-rosto", async (req, res) => {
 
     const docData = {
       instituicao: String(instituicao).toUpperCase(),
-      projeto_codigo: projetoCodigo || "—",
+      cnpj_instituicao: cnpjInstituicao || "—",
+      termo_parceria: termoParceria || "—",
       projeto_nome: projetoNome || "—",
+      projeto_codigo: projetoCodigo || "—",
       pc_numero: payload.prestacao_contas || "—",
-      natureza_disp: tipoRubrica || "—", // ✅ usa EXATAMENTE tipoRubrica
+      rubrica: tipoRubrica || "—",
       favorecido: favorecidoNome || "—",
       cnpj: favorecidoDoc || "—",
       n_extrato: extratoNum || "—",
@@ -585,6 +587,8 @@ router.post("/folha-rosto", async (req, res) => {
       data_pagamento: dataPagamento || "—",
       valor_pago: valorTotal || "—",
     }
+
+    console.log("[FOLHA ROSTO] Dados para template:", docData)
 
     const out = renderDocx(templatePath, docData)
     const hint = sanitizeFilename(

@@ -1,5 +1,16 @@
 // scripts/create-templates.js
-import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from "docx"
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  AlignmentType,
+  HeadingLevel,
+  WidthType,
+} from "docx"
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -21,59 +32,192 @@ const DISPENSA_DIR = path.join(TEMPLATES_DIR, "dispensa")
   }
 })
 
-// Função auxiliar para criar placeholders
 function placeholder(name) {
-  return `{${name}}`
+  return `{{${name}}}`
 }
 
-// Template: Folha de Rosto
 function createFolhaRostoTemplate(instituicao) {
+  const isEdge = instituicao.toLowerCase() === "edge"
+
   const doc = new Document({
     sections: [
       {
         properties: {},
         children: [
+          // Cabeçalho da instituição
           new Paragraph({
-            text: instituicao === "edge" ? "EDGE CAPITAL" : "VERTEX CAPITAL",
+            text: isEdge ? "EDGE CAPITAL" : "VERTEX - Instituto de Tecnologia e Inovação",
             heading: HeadingLevel.HEADING_1,
             alignment: AlignmentType.CENTER,
           }),
           new Paragraph({ text: "" }),
-          new Paragraph({
-            text: "FOLHA DE ROSTO",
-            heading: HeadingLevel.HEADING_2,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({ text: "" }),
-          new Paragraph({
-            children: [new TextRun({ text: "Projeto: ", bold: true }), new TextRun({ text: placeholder("projeto") })],
-          }),
-          new Paragraph({
-            children: [new TextRun({ text: "Rubrica: ", bold: true }), new TextRun({ text: placeholder("rubrica") })],
-          }),
+
+          // Informações do projeto
           new Paragraph({
             children: [
-              new TextRun({ text: "Descrição: ", bold: true }),
-              new TextRun({ text: placeholder("descricao") }),
+              new TextRun({ text: "Instituição Executora: ", bold: true }),
+              new TextRun({ text: placeholder("instituicao") }),
             ],
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Valor Total: ", bold: true }),
-              new TextRun({ text: placeholder("valor_total") }),
+              new TextRun({ text: "CNPJ: ", bold: true }),
+              new TextRun({ text: placeholder("cnpj_instituicao") }),
             ],
           }),
           new Paragraph({
-            children: [new TextRun({ text: "Data: ", bold: true }), new TextRun({ text: placeholder("data") })],
+            children: [
+              new TextRun({ text: "Termo de Parceria nº: ", bold: true }),
+              new TextRun({ text: placeholder("termo_parceria") }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Projeto: ", bold: true }),
+              new TextRun({ text: placeholder("projeto_nome") }),
+            ],
           }),
           new Paragraph({ text: "" }),
           new Paragraph({
-            text: "PROPOSTAS",
-            heading: HeadingLevel.HEADING_3,
+            children: [
+              new TextRun({ text: "Prestação de Contas: ", bold: true }),
+              new TextRun({ text: placeholder("pc_numero") }),
+            ],
+          }),
+          new Paragraph({ text: "" }),
+
+          // Natureza de Dispêndio
+          new Paragraph({
+            children: [new TextRun({ text: "Natureza de Dispêndio", bold: true })],
           }),
           new Paragraph({
-            children: [new TextRun({ text: placeholder("#propostas") })],
+            children: [new TextRun({ text: placeholder("rubrica") })],
           }),
+          new Paragraph({ text: "" }),
+
+          // Tabela de dados
+          new Table({
+            width: {
+              size: 100,
+              type: WidthType.PERCENTAGE,
+            },
+            rows: [
+              // Cabeçalho da tabela
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [new Paragraph({ text: "Favorecido", bold: true })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "CNPJ OU CPF", bold: true })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "Nº Extrato", bold: true })],
+                  }),
+                ],
+              }),
+              // Linha de dados
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [new Paragraph({ text: placeholder("favorecido") })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: placeholder("cnpj") })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: placeholder("n_extrato") })],
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new Paragraph({ text: "" }),
+
+          // Segunda tabela
+          new Table({
+            width: {
+              size: 100,
+              type: WidthType.PERCENTAGE,
+            },
+            rows: [
+              // Cabeçalho
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [new Paragraph({ text: "NF/ND", bold: true })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "Data de emissão da NF/ND", bold: true })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "Data do pagamento", bold: true })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: "Valor", bold: true })],
+                  }),
+                ],
+              }),
+              // Linha de dados
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [new Paragraph({ text: placeholder("nf_recibo") })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: placeholder("data_emissao") })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: placeholder("data_pagamento") })],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: placeholder("valor_pago") })],
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({ text: "" }),
+
+          // Lista de documentos necessários
+          new Paragraph({
+            children: [new TextRun({ text: "● Mapa de cotação ou justificativa para dispensa" })],
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: "● 3 propostas" })],
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: "● Contrato (se houver)" })],
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: "● Notas fiscais ou Invoice" })],
+          }),
+          new Paragraph({
+            children: [new TextRun({ text: "● Comprovante de pagamento" })],
+          }),
+          new Paragraph({ text: "" }),
+          new Paragraph({ text: "" }),
+
+          // Rodapé para VERTEX
+          ...(isEdge
+            ? []
+            : [
+                new Paragraph({ text: "" }),
+                new Paragraph({ text: "" }),
+                new Paragraph({
+                  text: "VERTEX - Instituto de Tecnologia e Inovação",
+                  alignment: AlignmentType.CENTER,
+                }),
+                new Paragraph({
+                  text: "Rua Melo Póvoas, 110 - Centro de Inovação do Jaraguá, Sala 113",
+                  alignment: AlignmentType.CENTER,
+                }),
+                new Paragraph({
+                  text: "Maceió, Alagoas",
+                  alignment: AlignmentType.CENTER,
+                }),
+              ]),
         ],
       },
     ],
