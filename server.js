@@ -988,7 +988,6 @@ const upload = {
     // Simulate file object for req.file if it's expected to be used directly.
     // In this specific case, the handler extracts path from req.file.path, so we need to ensure it's present.
     // The file upload middleware (express-fileupload) populates req.files, not req.file typically.
-    // The original update seems to expect 'upload.single' from multer, which populates req.file.
     // Let's adjust to work with express-fileupload as present in the main server.js.
     const files = normalizeIncomingFiles(req) // Using the existing normalize function
     if (files.length > 0) {
@@ -1013,13 +1012,28 @@ app.post("/api/parse-termo", upload.single("file"), async (req, res) => {
     const filePath = req.file.path
     const fileName = req.file.originalname
 
+    console.log("[v0] ========================================")
     console.log("[v0] Parsing termo de outorga:", fileName)
+    console.log("[v0] File path:", filePath)
+    console.log("[v0] File size:", req.file.size, "bytes")
+    console.log("[v0] ========================================")
 
     const rawText = await extractTextFromPDF(filePath)
-    console.log("[v0] Extracted text length:", rawText?.length || 0)
+    console.log("[v0] Extracted text length:", rawText?.length || 0, "caracteres")
+
+    if (rawText && rawText.length > 0) {
+      console.log("[v0] Primeiros 1000 caracteres do texto extraído:")
+      console.log(rawText.substring(0, 1000))
+      console.log("[v0] ========================================")
+    } else {
+      console.log("[v0] ⚠️ AVISO: Nenhum texto foi extraído do PDF!")
+    }
 
     const parsed = analyseTermoOutorgaText(rawText)
-    console.log("[v0] Parsed termo result:", JSON.stringify(parsed, null, 2))
+    console.log("[v0] ========================================")
+    console.log("[v0] Resultado final da análise:")
+    console.log(JSON.stringify(parsed, null, 2))
+    console.log("[v0] ========================================")
 
     // Clean up the temporary file created by express-fileupload
     fs.unlinkSync(filePath)
@@ -1032,7 +1046,7 @@ app.post("/api/parse-termo", upload.single("file"), async (req, res) => {
       parsed,
     })
   } catch (err) {
-    console.error("[v0] Error parsing termo:", err)
+    console.error("[v0] ✗✗✗ Error parsing termo:", err)
     // Ensure cleanup even if an error occurs
     if (req.file?.path) {
       try {
@@ -1045,8 +1059,6 @@ app.post("/api/parse-termo", upload.single("file"), async (req, res) => {
   }
 })
 
-// app.use("/api/generate", generateDocsRouter);     // ❌ desabilitar
-// registerDocRoutes(app, { openai, TEMPLATE_BASE }); // ❌ desabilitar
 app.use("/api", cnpjProxyRouter)
 app.use("/api", docRouter)
 
