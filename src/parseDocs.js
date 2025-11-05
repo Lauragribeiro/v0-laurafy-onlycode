@@ -506,6 +506,7 @@ function analyseTermoOutorgaText(text = "") {
   const simplified = String(text || "")
     .replace(/\s+/g, " ")
     .trim()
+
   if (!simplified) {
     return {
       vigenciaInicio: null,
@@ -517,240 +518,167 @@ function analyseTermoOutorgaText(text = "") {
     }
   }
 
-  const lower = simplified.toLowerCase()
-  const dateMatches = collectMatches(/(\d{4}[/-]\d{1,2}[/-]\d{1,2})|(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/g, simplified)
-  const valueMatches = collectMatches(/(?:r\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d{2})/gi, simplified)
+  console.log("[v0] analyseTermoOutorgaText - Iniciando análise do termo de outorga")
 
-  const periodoKeywords = [
-    /(per[íi]odo|periodo)\s*[:\-–]?/i,
-    /(per[íi]odo\s+de\s+execu[çc][ãa]o|periodo\s+de\s+execucao)\s*[:\-–]?/i,
-    /(dura[çc][ãa]o|duracao)\s*[:\-–]?/i,
-    /(vig[êe]ncia|vigencia)\s*[:\-–]?/i,
-    /(in[íi]cio\s+e\s+(t[ée]rmino|fim)|inicio\s+e\s+(termino|fim))\s*[:\-–]?/i,
-  ]
-
-  const findDatesNearKeyword = (matches, keywords) => {
-    if (!matches.length) return { dates: [], context: "", keyword: null }
-
-    let bestMatch = null
-    let bestScore = 0
-
-    // Procurar por cada palavra-chave
-    keywords.forEach((kw, kwIdx) => {
-      let re
-      if (kw instanceof RegExp) {
-        const flags = kw.flags.replace(/g/g, "")
-        re = new RegExp(kw.source, flags || "i")
-      } else {
-        re = new RegExp(String(kw), "i")
-      }
-
-      const kwMatch = lower.match(re)
-      if (!kwMatch) return
-
-      const kwPos = lower.indexOf(kwMatch[0])
-      const kwEnd = kwPos + kwMatch[0].length
-
-      // Procurar datas próximas a essa palavra-chave (dentro de 200 caracteres)
-      const nearbyDates = []
-      matches.forEach((dateItem) => {
-        const distance = Math.abs(dateItem.index - kwEnd)
-        if (distance < 200) {
-          const dateISO = toISODateTermo(dateItem.match)
-          if (dateISO) {
-            nearbyDates.push({
-              match: dateItem.match,
-              index: dateItem.index,
-              iso: dateISO,
-              distance,
-            })
-          }
-        }
-      })
-
-      if (nearbyDates.length > 0) {
-        // Ordenar por proximidade
-        nearbyDates.sort((a, b) => a.distance - b.distance)
-
-        // Calcular score baseado na prioridade da palavra-chave e número de datas encontradas
-        const score = (keywords.length - kwIdx) * 100 + nearbyDates.length * 10
-
-        if (score > bestScore) {
-          bestScore = score
-
-          // Extrair trecho original (contexto de 150 caracteres antes e depois)
-          const contextStart = Math.max(0, kwPos - 150)
-          const contextEnd = Math.min(simplified.length, kwEnd + 300)
-          const context = simplified.slice(contextStart, contextEnd)
-
-          bestMatch = {
-            dates: nearbyDates,
-            context,
-            keyword: kwMatch[0],
-            keywordPos: kwPos,
-          }
-        }
-      }
-    })
-
-    return bestMatch || { dates: [], context: "", keyword: null }
+  // Dividir o texto em páginas (aproximadamente, usando quebras de página ou tamanho)
+  const pages = []
+  const pageSize = 3000 // Aproximadamente 3000 caracteres por página
+  for (let i = 0; i < simplified.length; i += pageSize) {
+    pages.push(simplified.slice(i, i + pageSize))
   }
 
-  const periodoMatch = findDatesNearKeyword(dateMatches, periodoKeywords)
+  console.log("[v0] - Total de páginas aproximadas:", pages.length)
 
-  let vigenciaInicio = null
-  let vigenciaFim = null
-  let vigenciaRaw = ""
-  let trechoOriginal = ""
+  // Função para procurar "Período:" e extrair datas
+  const extractPeriodoFromText = (pageText, pageNum) => {
+    // Limpar texto (remover espaços duplos, caracteres invisíveis)
+    const cleaned = pageText.replace(/\s+/g, " ").trim()
 
-  if (periodoMatch.dates.length >= 2) {
-    // Temos pelo menos 2 datas - assumir que a primeira é início e a segunda é fim
-    vigenciaInicio = periodoMatch.dates[0].iso
-    vigenciaFim = periodoMatch.dates[1].iso
-    vigenciaRaw = `${periodoMatch.dates[0].match} a ${periodoMatch.dates[1].match}`
-    trechoOriginal = periodoMatch.context
+    // Procurar por "Período:" com variações
+    const periodoRegex = /per[íi]odo\s*[:\-–—]?/gi
+    const periodoMatch = cleaned.match(periodoRegex)
 
-    console.log("[v0] analyseTermoOutorgaText - Período encontrado com 2 datas")
-    console.log("[v0] - Palavra-chave:", periodoMatch.keyword)
-    console.log("[v0] - Início:", vigenciaInicio, "Fim:", vigenciaFim)
-    console.log("[v0] - Trecho original:", trechoOriginal.substring(0, 100) + "...")
-  } else if (periodoMatch.dates.length === 1) {
-    // Apenas 1 data encontrada - assumir que é a data de fim
-    vigenciaFim = periodoMatch.dates[0].iso
-    vigenciaRaw = periodoMatch.dates[0].match
-    trechoOriginal = periodoMatch.context
-
-    console.log("[v0] analyseTermoOutorgaText - Período encontrado com 1 data (assumindo fim)")
-    console.log("[v0] - Palavra-chave:", periodoMatch.keyword)
-    console.log("[v0] - Fim:", vigenciaFim)
-  } else {
-    // Nenhuma data encontrada próxima a "Período" - tentar fallback com outras palavras-chave
-    const fallbackKeywords = [/(t[ée]rmino|termino|fim)\s*[:\-–]?/i, /(at[ée])\s*[:\-–]?/i]
-
-    const pickByKeyword = (matches, keywords) => {
-      if (!matches.length) return null
-      let best = null
-      matches.forEach((item) => {
-        const start = Math.max(0, item.index - 120)
-        const end = Math.min(simplified.length, item.index + item.match.length + 120)
-        const context = lower.slice(start, end)
-
-        let score = 0
-        let foundKeyword = null
-
-        keywords.forEach((kw, idx) => {
-          let re
-          if (kw instanceof RegExp) {
-            const flags = kw.flags.replace(/g/g, "")
-            re = new RegExp(kw.source, flags || "i")
-          } else {
-            re = new RegExp(String(kw), "i")
-          }
-
-          if (re.test(context)) {
-            const weight = keywords.length - idx
-            score += weight * 10
-            if (!foundKeyword) foundKeyword = kw
-
-            const kwMatch = context.match(re)
-            if (kwMatch) {
-              const kwPos = context.indexOf(kwMatch[0])
-              const datePos = context.indexOf(item.match)
-              const distance = Math.abs(kwPos - datePos)
-              if (distance < 30) {
-                score += 50
-              } else if (distance < 60) {
-                score += 20
-              }
-            }
-          }
-        })
-
-        const dateISO = toISODateTermo(item.match)
-        if (!dateISO) {
-          return
-        }
-
-        if (score === 0) score = 1
-
-        if (!best || score > best.score || (score === best.score && item.index > best.index)) {
-          best = { ...item, score, keyword: foundKeyword, iso: dateISO }
-        }
-      })
-      return best
+    if (!periodoMatch) {
+      return null
     }
 
-    const chosenDate = pickByKeyword(dateMatches, fallbackKeywords)
-    if (chosenDate) {
-      vigenciaFim = chosenDate.iso
-      vigenciaRaw = chosenDate.match
+    console.log("[v0] - Encontrado 'Período' na página", pageNum)
 
-      const start = Math.max(0, chosenDate.index - 150)
-      const end = Math.min(simplified.length, chosenDate.index + 150)
-      trechoOriginal = simplified.slice(start, end)
+    // Encontrar a posição do "Período:"
+    const periodoPos = cleaned.toLowerCase().indexOf(periodoMatch[0].toLowerCase())
 
-      console.log("[v0] analyseTermoOutorgaText - Fallback: data de término encontrada")
-      console.log("[v0] - Palavra-chave:", chosenDate.keyword)
-      console.log("[v0] - Fim:", vigenciaFim)
-    } else {
-      console.log("[v0] analyseTermoOutorgaText - ERRO: Nenhuma data de vigência identificada")
+    // Extrair contexto (linha atual + 2 linhas seguintes, aproximadamente 300 caracteres)
+    const contextStart = Math.max(0, periodoPos - 50)
+    const contextEnd = Math.min(cleaned.length, periodoPos + 300)
+    const context = cleaned.slice(contextStart, contextEnd)
+
+    console.log("[v0] - Contexto extraído:", context.substring(0, 150))
+
+    // Aplicar regex para extrair datas (na ordem especificada)
+    // Regex 1: DD/MM/YYYY até DD/MM/YYYY
+    let dateMatch = context.match(/(\d{2}[/.]\d{2}[/.]\d{4})\s*(?:até|at[ée]|-|a|ao|—|–)\s*(\d{2}[/.]\d{2}[/.]\d{4})/i)
+
+    if (!dateMatch) {
+      // Regex 2: de DD/MM/YYYY a DD/MM/YYYY
+      dateMatch = context.match(
+        /(?:de|desde)?\s*(\d{2}[/.]\d{2}[/.]\d{4})\s*(?:a|até|at[ée]|ao)\s*(\d{2}[/.]\d{2}[/.]\d{4})/i,
+      )
+    }
+
+    if (dateMatch && dateMatch[1] && dateMatch[2]) {
+      console.log("[v0] - Datas encontradas:", dateMatch[1], "até", dateMatch[2])
+
+      // Normalizar datas para ISO
+      const inicio = toISODateTermo(dateMatch[1])
+      const fim = toISODateTermo(dateMatch[2])
+
+      if (inicio && fim) {
+        // Validar que início <= fim, se não, inverter
+        let inicioFinal = inicio
+        let fimFinal = fim
+
+        if (inicio > fim) {
+          console.log("[v0] - AVISO: Data de início > fim, invertendo")
+          inicioFinal = fim
+          fimFinal = inicio
+        }
+
+        return {
+          inicio_vigencia: inicioFinal,
+          fim_vigencia: fimFinal,
+          fonte_texto: context.trim(),
+          pagina: pageNum,
+          confianca: pageNum === 1 ? 0.99 : 0.7,
+        }
+      }
+    }
+
+    console.log("[v0] - Nenhuma data válida encontrada no contexto de 'Período'")
+    return null
+  }
+
+  // Priorizar 1ª página
+  let resultado = extractPeriodoFromText(pages[0], 1)
+
+  if (resultado) {
+    console.log("[v0] - Vigência extraída da 1ª página com sucesso")
+    console.log("[v0] - Início:", resultado.inicio_vigencia, "Fim:", resultado.fim_vigencia)
+
+    // Extrair valor máximo (se houver)
+    const valueMatches = collectMatches(/(?:r\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d{2})/gi, simplified)
+    let valorMaximo = null
+    let valorMaximoRaw = ""
+
+    if (valueMatches.length > 0) {
+      valorMaximoRaw = valueMatches[0].match
+      const cleaned = valorMaximoRaw.replace(/[^\d,]/g, "").replace(",", ".")
+      valorMaximo = Number.parseFloat(cleaned) || null
+    }
+
+    return {
+      vigenciaInicio: resultado.inicio_vigencia,
+      vigenciaFim: resultado.fim_vigencia,
+      vigenciaRaw: resultado.fonte_texto,
+      trechoOriginal: resultado.fonte_texto,
+      valorMaximoRaw,
+      valorMaximo,
+      _metadata: {
+        pagina: resultado.pagina,
+        confianca: resultado.confianca,
+      },
     }
   }
 
-  // Extrair valor máximo (mantém lógica original)
-  const pickValueByKeyword = (matches, keywords) => {
-    if (!matches.length) return null
-    let best = null
-    matches.forEach((item) => {
-      const start = Math.max(0, item.index - 120)
-      const end = Math.min(simplified.length, item.index + item.match.length + 120)
-      const context = lower.slice(start, end)
+  // Se não encontrou na 1ª página, procurar nas demais
+  console.log("[v0] - 'Período' não encontrado na 1ª página, procurando nas demais...")
 
-      let score = 0
-      keywords.forEach((kw, idx) => {
-        let re
-        if (kw instanceof RegExp) {
-          const flags = kw.flags.replace(/g/g, "")
-          re = new RegExp(kw.source, flags || "i")
-        } else {
-          re = new RegExp(String(kw), "i")
-        }
+  for (let i = 1; i < pages.length; i++) {
+    resultado = extractPeriodoFromText(pages[i], i + 1)
+    if (resultado) {
+      console.log("[v0] - AVISO: Vigência encontrada fora da 1ª página (página", resultado.pagina, ")")
 
-        if (re.test(context)) {
-          const weight = keywords.length - idx
-          score += weight * 10
-        }
-      })
+      // Extrair valor máximo
+      const valueMatches = collectMatches(/(?:r\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d{2})/gi, simplified)
+      let valorMaximo = null
+      let valorMaximoRaw = ""
 
-      if (score === 0) score = 1
-
-      if (!best || score > best.score) {
-        best = { ...item, score }
+      if (valueMatches.length > 0) {
+        valorMaximoRaw = valueMatches[0].match
+        const cleaned = valorMaximoRaw.replace(/[^\d,]/g, "").replace(",", ".")
+        valorMaximo = Number.parseFloat(cleaned) || null
       }
-    })
-    return best
+
+      return {
+        vigenciaInicio: resultado.inicio_vigencia,
+        vigenciaFim: resultado.fim_vigencia,
+        vigenciaRaw: resultado.fonte_texto,
+        trechoOriginal: resultado.fonte_texto,
+        valorMaximoRaw,
+        valorMaximo,
+        _metadata: {
+          pagina: resultado.pagina,
+          confianca: resultado.confianca,
+          aviso: "Campo 'Período' não encontrado na 1ª página; extração feita fora do cabeçalho.",
+        },
+      }
+    }
   }
 
-  const chosenValue = pickValueByKeyword(valueMatches, [/(valor|bolsa|limite|total|montante)/i])
-  const valorRaw = chosenValue?.match || ""
-  const valorMaximo = valorRaw ? parseMoneyToNumber(valorRaw) : null
-
-  console.log(
-    "[v0] analyseTermoOutorgaText - Todas as datas encontradas:",
-    dateMatches.map((d) => d.match),
-  )
-  console.log("[v0] analyseTermoOutorgaText - Resultado final:")
-  console.log("[v0] - vigenciaInicio:", vigenciaInicio)
-  console.log("[v0] - vigenciaFim:", vigenciaFim)
-  console.log("[v0] - valorMaximo:", valorMaximo)
+  // Nenhuma vigência encontrada em todo o documento
+  console.log("[v0] - ERRO: Campo 'Período' não localizado no documento")
 
   return {
-    vigenciaInicio,
-    vigenciaFim,
-    vigenciaRaw,
-    trechoOriginal,
-    valorMaximoRaw: valorRaw,
-    valorMaximo,
+    vigenciaInicio: null,
+    vigenciaFim: null,
+    vigenciaRaw: "",
+    trechoOriginal: "",
+    valorMaximoRaw: "",
+    valorMaximo: null,
+    _metadata: {
+      erro: "vigencia_nao_identificada",
+      detalhe: "Campo 'Período' não localizado no documento",
+      confianca: 0.0,
+    },
   }
 }
 
