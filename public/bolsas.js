@@ -939,6 +939,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       })
 
       console.log("[v0] handleModalSubmit - Record criado:", record)
+      console.log("[v0] handleModalSubmit - Termo data:", record.termo)
 
       bolsistas = upsertBolsistas(bolsistas, record, editingId)
       setFormFeedback(editingId ? "Bolsista atualizado com sucesso." : "Bolsista cadastrado com sucesso.", "success")
