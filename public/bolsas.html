@@ -6,6 +6,8 @@
   <title>Prestação de Contas — Gerenciamento de Bolsas</title>
   <link rel="stylesheet" href="/styles/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.js" crossorigin="anonymous"></script>
+  <!-- Adicionando biblioteca xlsx via CDN para exportação Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
     if (window.pdfjsLib?.GlobalWorkerOptions) {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -57,7 +59,19 @@
     <section class="card block">
       <div class="block-head">
         <h2 class="block-title">Recursos Humanos</h2>
-        <span class="tiny muted">Clique em um bolsista para visualizar e editar os detalhes.</span>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <!-- Adicionando filtro de período e botão de exportação Excel -->
+          <label style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="tiny muted">Filtrar por período:</span>
+            <select id="filtro-periodo" class="form-select" style="min-width: 150px;">
+              <option value="">Todos os períodos</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-outline" id="btn-exportar-excel" title="Baixar Excel">
+            ⬇️📊 Baixar Excel
+          </button>
+          <span class="tiny muted">Clique em um bolsista para visualizar e editar os detalhes.</span>
+        </div>
       </div>
 
       <div class="table-wrap">
@@ -68,6 +82,8 @@
               <th>CPF</th>
               <th>Função no Projeto</th>
               <th>Valor da Bolsa</th>
+              <!-- Adicionando coluna Período de Vinculação -->
+              <th>Período de Vinculação</th>
               <th>Vigência do Termo de Outorga</th>
             </tr>
           </thead>
@@ -107,6 +123,20 @@
           <input id="campo-valor" type="text" inputmode="decimal" placeholder="R$ 0.000,00" required />
           <small class="tiny muted">Informe o valor no formato monetário brasileiro.</small>
         </label>
+
+        <!-- Adicionando campo de períodos de vinculação -->
+        <div class="field span-2">
+          <label>Período(s) de Vinculação ao Projeto</label>
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <input id="campo-periodo-mes" type="number" min="1" max="12" placeholder="Mês (1-12)" style="width: 100px;" />
+            <input id="campo-periodo-ano" type="number" min="2020" max="2099" placeholder="Ano" style="width: 100px;" />
+            <button type="button" class="btn btn-outline" id="btn-adicionar-periodo">+ Adicionar</button>
+          </div>
+          <div id="periodos-chips" class="chips-container" style="display: flex; flex-wrap: wrap; gap: 0.5rem; min-height: 40px; padding: 0.5rem; border: 1px solid #e0e0e0; border-radius: 4px; background: #f9f9f9;">
+            <span class="tiny muted" id="periodos-empty">Nenhum período adicionado.</span>
+          </div>
+          <small class="tiny muted">Selecione os meses/anos em que o bolsista esteve vinculado ao projeto.</small>
+        </div>
 
         <div class="field span-2">
           <label>Termo de Outorga (PDF)</label>
