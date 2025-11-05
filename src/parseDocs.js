@@ -504,7 +504,10 @@ function toISODateTermo(raw) {
 
 function analyseTermoOutorgaText(text = "") {
   const simplified = String(text || "")
-    .replace(/\s+/g, " ")
+    .replace(/\s+/g, " ") // Múltiplos espaços → um espaço
+    .replace(/(\d)\s*\/\s*(\d)/g, "$1/$2") // Remove espaços ao redor de barras: "01 / 03" → "01/03"
+    .replace(/(\d)\s*\.\s*(\d)/g, "$1.$2") // Remove espaços ao redor de pontos: "01 . 03" → "01.03"
+    .replace(/(\d)\s*-\s*(\d)/g, "$1-$2") // Remove espaços ao redor de hífens: "01 - 03" → "01-03"
     .trim()
 
   if (!simplified) {
@@ -520,12 +523,11 @@ function analyseTermoOutorgaText(text = "") {
 
   console.log("[v0] analyseTermoOutorgaText - Iniciando análise")
   console.log("[v0] - Tamanho do texto:", simplified.length, "caracteres")
-  console.log("[v0] - Primeiros 2000 caracteres:", simplified.substring(0, 2000))
+  console.log("[v0] - Primeiros 2000 caracteres (após normalização):", simplified.substring(0, 2000))
 
   // Normalizar o texto para facilitar a busca (remover acentos de "Período")
   const normalizedText = simplified.replace(/Período/gi, "Periodo").replace(/período/gi, "periodo")
 
-  // Regex muito flexível para capturar "Periodo: DD/MM/YYYY até DD/MM/YYYY"
   const periodoRegex =
     /periodo\s*[:\-–—]?\s*(\d{2}[/.-]\d{2}[/.-]\d{4})\s*(?:até|ate|at[ée]|a)\s*(\d{2}[/.-]\d{2}[/.-]\d{4})/gi
 
