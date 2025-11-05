@@ -429,9 +429,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         valorDetail = `Limite identificado: ${formatBRL(valorMax)}.`
       }
 
-      const ok = okVigencia && okValor
+      const ok = okVigencia
       const label = ok ? "Vigente" : "Não Vigente"
-      const detail = ok ? vigenciaDetail : `${vigenciaDetail} ${valorDetail}`.trim()
+      let detail = vigenciaDetail
+      if (!okValor && valorDetail) {
+        detail = `${vigenciaDetail} ${valorDetail}`.trim()
+      }
 
       return {
         status: ok ? "vigente" : "nao_vigente",
