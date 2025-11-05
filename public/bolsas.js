@@ -40,64 +40,73 @@ export const buildTermoData = (upload, fallback = null, now = defaultNow) => {
 }
 
 export const buildBolsistaRecord = ({
-  editingId,
-  nome,
-  cpfDigits,
-  funcao,
-  valorNum,
-  termoUpload,
-  fallbackTermo,
-  existingRecord,
-}) => {
-  const termo = termoUpload
-    ? {
-        fileName: termoUpload.fileName,
-        size: termoUpload.size,
-        rawText: termoUpload.rawText || "",
-        vigenciaInicio: termoUpload.parsed?.inicio_vigencia || null,
-        vigenciaFim: termoUpload.parsed?.fim_vigencia || null,
-        vigenciaISO: termoUpload.parsed?.fim_vigencia || termoUpload.parsed?.vigenciaISO || null, // Fallback for compatibility
-        vigenciaRaw: termoUpload.parsed?.fonte_texto || termoUpload.parsed?.vigenciaRaw || "",
-        valorMaximo: termoUpload.parsed?.valorMaximo || null,
-        valorMaximoRaw: termoUpload.parsed?.valorMaximoRaw || "",
-        confianca: termoUpload.parsed?.confianca || null,
-        pagina: termoUpload.parsed?.pagina || null,
-      }
-    : fallbackTermo
+  editingId = null,
+  nome = "",
+  cpfDigits = "",
+  funcao = "",
+  valorNum = 0,
+  termoUpload = null,
+  fallbackTermo = null,
+  existingRecord = null,
+} = {}) => {
+  const now = new Date().toISOString()
+  const id = editingId ?? Date.now()
+
+  let termo = null
+  if (termoUpload) {
+    termo = {
+      fileName: termoUpload.fileName || "termo.pdf",
+      inicio_vigencia: termoUpload.parsed?.inicio_vigencia || null,
+      fim_vigencia: termoUpload.parsed?.fim_vigencia || null,
+      vigenciaInicio: termoUpload.parsed?.inicio_vigencia || null,
+      vigenciaFim: termoUpload.parsed?.fim_vigencia || null,
+      vigenciaISO: termoUpload.parsed?.fim_vigencia || termoUpload.parsed?.vigenciaISO || null,
+      vigenciaRaw: termoUpload.parsed?.fonte_texto || termoUpload.parsed?.vigenciaRaw || "",
+      fonte_texto: termoUpload.parsed?.fonte_texto || "",
+      valorMaximo: termoUpload.parsed?.valorMaximo || null,
+      valorMaximoRaw: termoUpload.parsed?.valorMaximoRaw || "",
+    }
+  } else if (fallbackTermo) {
+    termo = {
+      fileName: fallbackTermo.fileName || "termo.pdf",
+      inicio_vigencia: fallbackTermo.inicio_vigencia || fallbackTermo.vigenciaInicio || null,
+      fim_vigencia: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || fallbackTermo.vigenciaISO || null,
+      vigenciaInicio: fallbackTermo.inicio_vigencia || fallbackTermo.vigenciaInicio || null,
+      vigenciaFim: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || null,
+      vigenciaISO: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || fallbackTermo.vigenciaISO || null,
+      vigenciaRaw: fallbackTermo.fonte_texto || fallbackTermo.vigenciaRaw || "",
+      fonte_texto: fallbackTermo.fonte_texto || fallbackTermo.vigenciaRaw || "",
+      valorMaximo: fallbackTermo.valorMaximo || null,
+      valorMaximoRaw: fallbackTermo.valorMaximoRaw || "",
+    }
+  }
 
   const historicoAlteracoes = Array.isArray(existingRecord?.historicoAlteracoes)
     ? [...existingRecord.historicoAlteracoes]
     : []
 
-  const registrarAlteracao = (campo, anterior, atual) => {
-    historicoAlteracoes.unshift({
-      campo,
-      anterior,
-      atual,
-      modificadoEm: new Date().toISOString(),
-    })
-  }
+  if (editingId && existingRecord) {
+    const changes = []
+    if (existingRecord.funcao !== funcao) changes.push(`Função: ${existingRecord.funcao} → ${funcao}`)
+    if (existingRecord.valor !== valorNum) changes.push(`Valor: R$ ${existingRecord.valor} → R$ ${valorNum}`)
 
-  if (existingRecord) {
-    if (existingRecord.valor !== valorNum) {
-      registrarAlteracao("valor", existingRecord.valor ?? null, valorNum ?? null)
-    }
-
-    const funcaoAnterior = existingRecord.funcao ?? ""
-    const funcaoAtual = funcao ?? ""
-    if (funcaoAnterior !== funcaoAtual) {
-      registrarAlteracao("funcao", funcaoAnterior, funcaoAtual)
+    if (changes.length > 0) {
+      historicoAlteracoes.push({
+        data: now,
+        alteracoes: changes,
+      })
     }
   }
 
   return {
-    id: editingId || defaultIdFactory(),
+    id,
     nome,
     cpf: cpfDigits,
     funcao,
     valor: valorNum,
     termo,
-    atualizadoEm: new Date().toISOString(),
+    criadoEm: existingRecord?.criadoEm || now,
+    atualizadoEm: now,
     historicoAlteracoes,
   }
 }
@@ -202,7 +211,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
     const formatDateBR = (iso) => {
       if (!iso) return ""
-      const match = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
+      const match = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/)
       if (match) return `${match[3]}/${match[2]}/${match[1]}`
       const date = new Date(iso)
       if (Number.isNaN(date.getTime())) return ""
@@ -739,12 +748,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const termo = row.termo || null
       if (termo) {
         if (termoFileName) termoFileName.textContent = termo.fileName || "Termo carregado."
+
+        console.log("[v0] fillModalWithRow - Carregando termo:", termo)
+
         updateTermoSummary({
           fileName: termo.fileName,
           parsed: {
-            inicio_vigencia: termo.inicio_vigencia,
-            fim_vigencia: termo.fim_vigencia,
-            fonte_texto: termo.fonte_texto,
+            inicio_vigencia: termo.inicio_vigencia || termo.vigenciaInicio,
+            fim_vigencia: termo.fim_vigencia || termo.vigenciaFim || termo.vigenciaISO,
+            fonte_texto: termo.fonte_texto || termo.vigenciaRaw,
             valorMaximo: termo.valorMaximo,
             valorMaximoRaw: termo.valorMaximoRaw,
           },
@@ -881,10 +893,25 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         cpfDigits,
         funcao,
         valorNum,
-        termoUpload,
+        termoUpload:
+          termoUpload ||
+          (existing?.termo
+            ? {
+                fileName: existing.termo.fileName,
+                parsed: {
+                  inicio_vigencia: existing.termo.inicio_vigencia || existing.termo.vigenciaInicio,
+                  fim_vigencia: existing.termo.fim_vigencia || existing.termo.vigenciaFim || existing.termo.vigenciaISO,
+                  fonte_texto: existing.termo.fonte_texto || existing.termo.vigenciaRaw,
+                  valorMaximo: existing.termo.valorMaximo,
+                  valorMaximoRaw: existing.termo.valorMaximoRaw,
+                },
+              }
+            : null),
         fallbackTermo: existing?.termo || null,
         existingRecord: existing || null,
       })
+
+      console.log("[v0] handleModalSubmit - Record criado:", record)
 
       bolsistas = upsertBolsistas(bolsistas, record, editingId)
       setFormFeedback(editingId ? "Bolsista atualizado com sucesso." : "Bolsista cadastrado com sucesso.", "success")
