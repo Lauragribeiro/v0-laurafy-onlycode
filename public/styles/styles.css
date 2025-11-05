@@ -1,3 +1,28 @@
+/* =========================================================
+   DESIGN SYSTEM (cores, sombras, tipografia)
+   ========================================================= */
+:root {
+  --color-primary: #152653;
+  --color-primary-dark: #0f1b3f;
+  --color-secondary: #486385;
+  --color-secondary-soft: #d4d9e4;
+  --color-tertiary: #a9b0c0;
+  --color-tertiary-light: #e3e6ed;
+  --color-background-light: #fefefe;
+
+  --bg: var(--color-background-light);
+  --panel: #ffffff;
+  --text: var(--color-primary);
+  --muted: var(--color-tertiary);
+
+  --primary: var(--color-primary);
+  --primary-700: var(--color-primary-dark);
+
+  --ring: rgba(21, 38, 83, 0.25);
+  --shadow: 0 12px 34px rgba(21, 38, 83, 0.1);
+  --radius: 16px;
+}
+
 /* Adicionando estilos para chips de períodos */
 .chips-container {
   display: flex;
