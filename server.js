@@ -1839,23 +1839,45 @@ const HOST = "0.0.0.0"
 function startServer(port = DEFAULT_PORT) {
   if (globalThis.__serverStarted) return
   globalThis.__serverStarted = true
+
+  console.log("[server] ========================================")
+  console.log("[server] 🚀 Iniciando servidor...")
+  console.log("[server] ========================================")
+
   const server = app.listen(port, HOST, () => {
-    console.log(`✅ Servidor rodando em http://localhost:${port}`)
-    console.log("TEMPLATE_BASE:", TEMPLATE_BASE)
+    console.log("[server] ========================================")
+    console.log(`[server] ✅ Servidor rodando com sucesso!`)
+    console.log(`[server] 🌐 URL: http://localhost:${port}`)
+    console.log(`[server] 📂 TEMPLATE_BASE: ${TEMPLATE_BASE}`)
+    console.log("[server] ========================================")
+    console.log("[server] 💡 IMPORTANTE: Abra o navegador e acesse:")
+    console.log(`[server]    http://localhost:${port}`)
+    console.log("[server] ========================================")
   })
+
   server.on("error", (err) => {
     if (err.code === "EADDRINUSE") {
-      console.warn(`⚠️ Porta ${port} em uso. Tentando ${port + 1}...`)
+      console.warn(`[server] ⚠️ Porta ${port} em uso. Tentando ${port + 1}...`)
       globalThis.__serverStarted = false
       startServer(port + 1)
     } else {
+      console.error("[server] ❌ Erro ao iniciar servidor:", err)
       throw err
     }
   })
+
   for (const sig of ["SIGINT", "SIGTERM"]) {
-    process.on(sig, () => server.close(() => process.exit(0)))
+    process.on(sig, () => {
+      console.log(`[server] 🛑 Recebido sinal ${sig}, encerrando servidor...`)
+      server.close(() => {
+        console.log("[server] ✅ Servidor encerrado com sucesso")
+        process.exit(0)
+      })
+    })
   }
 }
+
+console.log("[server] ========================================")
+console.log("[server] 📋 Iniciando aplicação...")
+console.log("[server] ========================================")
 startServer()
-// Server() // The 'Server' variable was undeclared and has been removed.
-// undeclared and has been removed. // Removed these lines as they caused errors.
