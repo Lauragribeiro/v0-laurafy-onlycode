@@ -520,10 +520,12 @@ function analyseTermoOutorgaText(text = "") {
 
   console.log("[v0] analyseTermoOutorgaText - Iniciando análise do termo de outorga")
   console.log("[v0] - Tamanho do texto:", simplified.length, "caracteres")
-  console.log("[v0] - Primeiros 1000 caracteres do texto:", simplified.substring(0, 1000))
+  console.log("[v0] - Primeiros 2000 caracteres do texto:", simplified.substring(0, 2000))
 
-  // Regex mais específica para capturar o padrão exato do documento
-  const periodoRegex = /per[íi]odo\s*[:\-–—]?\s*(\d{2}[/]\d{2}[/]\d{4})\s*(?:até|at[ée])\s*(\d{2}[/]\d{2}[/]\d{4})/gi
+  // Procurar por "Período:" seguido de duas datas
+  // Regex mais flexível que aceita variações de espaçamento
+  const periodoRegex =
+    /per[íi]odo\s*[:\-–—]?\s*(\d{2}[/.-]\d{2}[/.-]\d{4})\s*(?:até|at[ée]|a)\s*(\d{2}[/.-]\d{2}[/.-]\d{4})/gi
 
   const match = periodoRegex.exec(simplified)
 
@@ -565,28 +567,54 @@ function analyseTermoOutorgaText(text = "") {
     } else {
       console.log("[v0] - ERRO: Datas inválidas após normalização")
     }
-  } else {
-    console.log("[v0] - ERRO: Padrão 'Período: DD/MM/YYYY até DD/MM/YYYY' NÃO encontrado no texto")
-    console.log("[v0] - Tentando regex alternativa com ponto...")
+  }
 
-    // Tentar com ponto em vez de barra
-    const periodoRegexPonto =
-      /per[íi]odo\s*[:\-–—]?\s*(\d{2}[.]\d{2}[.]\d{4})\s*(?:até|at[ée])\s*(\d{2}[.]\d{2}[.]\d{4})/gi
-    const matchPonto = periodoRegexPonto.exec(simplified)
+  // Se não encontrou com a primeira regex, tentar buscar qualquer padrão de duas datas próximas
+  console.log("[v0] - Tentando busca alternativa por duas datas próximas...")
 
-    if (matchPonto) {
-      console.log("[v0] - ✓✓ ENCONTRADO 'Período:' com datas (formato ponto):", matchPonto[0])
+  // Buscar todas as datas no formato DD/MM/YYYY ou DD.MM.YYYY
+  const dateRegex = /(\d{2}[/.-]\d{2}[/.-]\d{4})/g
+  const allDates = []
+  let dateMatch
 
-      const inicio = toISODateTermo(matchPonto[1])
-      const fim = toISODateTermo(matchPonto[2])
+  while ((dateMatch = dateRegex.exec(simplified)) !== null) {
+    const dateStr = dateMatch[1]
+    const isoDate = toISODateTermo(dateStr)
+    if (isoDate) {
+      allDates.push({
+        raw: dateStr,
+        iso: isoDate,
+        index: dateMatch.index,
+      })
+    }
+  }
 
-      if (inicio && fim) {
+  console.log("[v0] - Total de datas válidas encontradas:", allDates.length)
+
+  if (allDates.length >= 2) {
+    // Procurar por "Período" no texto e pegar as duas primeiras datas após essa palavra
+    const periodoIndex = simplified.toLowerCase().indexOf("período")
+
+    if (periodoIndex !== -1) {
+      console.log("[v0] - Encontrado 'Período' na posição:", periodoIndex)
+
+      // Filtrar datas que aparecem depois de "Período"
+      const datesAfterPeriodo = allDates.filter((d) => d.index > periodoIndex)
+
+      if (datesAfterPeriodo.length >= 2) {
+        const inicio = datesAfterPeriodo[0].iso
+        const fim = datesAfterPeriodo[1].iso
+
+        console.log("[v0] - ✓✓ Usando as duas primeiras datas após 'Período'")
+        console.log("[v0] - Data início:", inicio, "(raw:", datesAfterPeriodo[0].raw, ")")
+        console.log("[v0] - Data fim:", fim, "(raw:", datesAfterPeriodo[1].raw, ")")
+
         if (inicio > fim) {
           return {
             inicio_vigencia: fim,
             fim_vigencia: inicio,
-            vigenciaRaw: matchPonto[0],
-            fonte_texto: matchPonto[0],
+            vigenciaRaw: `${datesAfterPeriodo[0].raw} até ${datesAfterPeriodo[1].raw}`,
+            fonte_texto: `Período: ${datesAfterPeriodo[0].raw} até ${datesAfterPeriodo[1].raw}`,
             valorMaximoRaw: "",
             valorMaximo: null,
           }
@@ -595,17 +623,47 @@ function analyseTermoOutorgaText(text = "") {
         return {
           inicio_vigencia: inicio,
           fim_vigencia: fim,
-          vigenciaRaw: matchPonto[0],
-          fonte_texto: matchPonto[0],
+          vigenciaRaw: `${datesAfterPeriodo[0].raw} até ${datesAfterPeriodo[1].raw}`,
+          fonte_texto: `Período: ${datesAfterPeriodo[0].raw} até ${datesAfterPeriodo[1].raw}`,
           valorMaximoRaw: "",
           valorMaximo: null,
         }
       }
     }
+
+    // Se não encontrou "Período", usar as duas primeiras datas válidas do documento
+    console.log("[v0] - Usando as duas primeiras datas válidas do documento")
+    const inicio = allDates[0].iso
+    const fim = allDates[1].iso
+
+    console.log("[v0] - Data início:", inicio, "(raw:", allDates[0].raw, ")")
+    console.log("[v0] - Data fim:", fim, "(raw:", allDates[1].raw, ")")
+
+    if (inicio > fim) {
+      return {
+        inicio_vigencia: fim,
+        fim_vigencia: inicio,
+        vigenciaRaw: `${allDates[0].raw} até ${allDates[1].raw}`,
+        fonte_texto: `${allDates[0].raw} até ${allDates[1].raw}`,
+        valorMaximoRaw: "",
+        valorMaximo: null,
+      }
+    }
+
+    return {
+      inicio_vigencia: inicio,
+      fim_vigencia: fim,
+      vigenciaRaw: `${allDates[0].raw} até ${allDates[1].raw}`,
+      fonte_texto: `${allDates[0].raw} até ${allDates[1].raw}`,
+      valorMaximoRaw: "",
+      valorMaximo: null,
+    }
   }
 
   // Fallback: retornar vazio se não encontrar
   console.log("[v0] - ERRO: Não foi possível extrair vigência do termo de outorga")
+  console.log("[v0] - Datas encontradas:", allDates.length)
+
   return {
     inicio_vigencia: null,
     fim_vigencia: null,
