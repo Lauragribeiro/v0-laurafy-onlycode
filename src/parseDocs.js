@@ -519,6 +519,7 @@ function analyseTermoOutorgaText(text = "") {
   }
 
   console.log("[v0] analyseTermoOutorgaText - Iniciando análise do termo de outorga")
+  console.log("[v0] - Tamanho do texto:", simplified.length, "caracteres")
 
   // Dividir o texto em páginas (aproximadamente, usando quebras de página ou tamanho)
   const pages = []
@@ -528,49 +529,72 @@ function analyseTermoOutorgaText(text = "") {
   }
 
   console.log("[v0] - Total de páginas aproximadas:", pages.length)
+  console.log("[v0] - Primeiros 500 caracteres da 1ª página:", pages[0]?.substring(0, 500))
 
   // Função para procurar "Período:" e extrair datas
   const extractPeriodoFromText = (pageText, pageNum) => {
     // Limpar texto (remover espaços duplos, caracteres invisíveis)
     const cleaned = pageText.replace(/\s+/g, " ").trim()
 
-    // Procurar por "Período:" com variações
-    const periodoRegex = /per[íi]odo\s*[:\-–—]?/gi
-    const periodoMatch = cleaned.match(periodoRegex)
+    console.log("[v0] - Procurando 'Período' na página", pageNum)
 
-    if (!periodoMatch) {
+    // Procurar por "Período:" com variações (case insensitive)
+    const periodoRegex = /per[íi]odo\s*[:\-–—]?/gi
+    const periodoMatches = cleaned.match(periodoRegex)
+
+    if (!periodoMatches || periodoMatches.length === 0) {
+      console.log("[v0] - 'Período' NÃO encontrado na página", pageNum)
       return null
     }
 
-    console.log("[v0] - Encontrado 'Período' na página", pageNum)
+    console.log("[v0] - ✓ Encontrado 'Período' na página", pageNum, ":", periodoMatches[0])
 
     // Encontrar a posição do "Período:"
-    const periodoPos = cleaned.toLowerCase().indexOf(periodoMatch[0].toLowerCase())
+    const periodoPos = cleaned.toLowerCase().indexOf(periodoMatches[0].toLowerCase())
 
     // Extrair contexto (linha atual + 2 linhas seguintes, aproximadamente 300 caracteres)
     const contextStart = Math.max(0, periodoPos - 50)
     const contextEnd = Math.min(cleaned.length, periodoPos + 300)
     const context = cleaned.slice(contextStart, contextEnd)
 
-    console.log("[v0] - Contexto extraído:", context.substring(0, 150))
+    console.log("[v0] - Contexto completo extraído (", context.length, "chars):", context)
 
     // Aplicar regex para extrair datas (na ordem especificada)
-    // Regex 1: DD/MM/YYYY até DD/MM/YYYY
-    let dateMatch = context.match(/(\d{2}[/.]\d{2}[/.]\d{4})\s*(?:até|at[ée]|-|a|ao|—|–)\s*(\d{2}[/.]\d{2}[/.]\d{4})/i)
+    // Regex 1: DD/MM/YYYY até DD/MM/YYYY (mais específica)
+    let dateMatch = context.match(/(\d{2}[/]\d{2}[/]\d{4})\s*(?:até|at[ée])\s*(\d{2}[/]\d{2}[/]\d{4})/i)
 
-    if (!dateMatch) {
-      // Regex 2: de DD/MM/YYYY a DD/MM/YYYY
-      dateMatch = context.match(
-        /(?:de|desde)?\s*(\d{2}[/.]\d{2}[/.]\d{4})\s*(?:a|até|at[ée]|ao)\s*(\d{2}[/.]\d{2}[/.]\d{4})/i,
-      )
+    if (dateMatch) {
+      console.log("[v0] - ✓ Regex 1 matched:", dateMatch[0])
+    } else {
+      console.log("[v0] - Regex 1 não encontrou datas")
+      // Regex 2: DD.MM.YYYY até DD.MM.YYYY
+      dateMatch = context.match(/(\d{2}[.]\d{2}[.]\d{4})\s*(?:até|at[ée])\s*(\d{2}[.]\d{2}[.]\d{4})/i)
+
+      if (dateMatch) {
+        console.log("[v0] - ✓ Regex 2 matched:", dateMatch[0])
+      } else {
+        console.log("[v0] - Regex 2 não encontrou datas")
+        // Regex 3: de DD/MM/YYYY a DD/MM/YYYY
+        dateMatch = context.match(
+          /(?:de|desde)?\s*(\d{2}[/.]\d{2}[/.]\d{4})\s*(?:a|até|at[ée]|ao)\s*(\d{2}[/.]\d{2}[/.]\d{4})/i,
+        )
+
+        if (dateMatch) {
+          console.log("[v0] - ✓ Regex 3 matched:", dateMatch[0])
+        } else {
+          console.log("[v0] - Regex 3 não encontrou datas")
+        }
+      }
     }
 
     if (dateMatch && dateMatch[1] && dateMatch[2]) {
-      console.log("[v0] - Datas encontradas:", dateMatch[1], "até", dateMatch[2])
+      console.log("[v0] - ✓✓ Datas extraídas:", dateMatch[1], "até", dateMatch[2])
 
       // Normalizar datas para ISO
       const inicio = toISODateTermo(dateMatch[1])
       const fim = toISODateTermo(dateMatch[2])
+
+      console.log("[v0] - Datas normalizadas para ISO:", inicio, "até", fim)
 
       if (inicio && fim) {
         // Validar que início <= fim, se não, inverter
@@ -578,10 +602,12 @@ function analyseTermoOutorgaText(text = "") {
         let fimFinal = fim
 
         if (inicio > fim) {
-          console.log("[v0] - AVISO: Data de início > fim, invertendo")
+          console.log("[v0] - ⚠️ AVISO: Data de início > fim, invertendo")
           inicioFinal = fim
           fimFinal = inicio
         }
+
+        console.log("[v0] - ✓✓✓ Vigência final:", inicioFinal, "até", fimFinal)
 
         return {
           inicio_vigencia: inicioFinal,
@@ -590,10 +616,13 @@ function analyseTermoOutorgaText(text = "") {
           pagina: pageNum,
           confianca: pageNum === 1 ? 0.99 : 0.7,
         }
+      } else {
+        console.log("[v0] - ✗ Falha ao normalizar datas para ISO")
       }
+    } else {
+      console.log("[v0] - ✗ Nenhuma data válida encontrada no contexto de 'Período'")
     }
 
-    console.log("[v0] - Nenhuma data válida encontrada no contexto de 'Período'")
     return null
   }
 
@@ -601,7 +630,7 @@ function analyseTermoOutorgaText(text = "") {
   let resultado = extractPeriodoFromText(pages[0], 1)
 
   if (resultado) {
-    console.log("[v0] - Vigência extraída da 1ª página com sucesso")
+    console.log("[v0] - ✓✓✓✓ Vigência extraída da 1ª página com sucesso!")
     console.log("[v0] - Início:", resultado.inicio_vigencia, "Fim:", resultado.fim_vigencia)
 
     // Extrair valor máximo (se houver)
@@ -630,12 +659,12 @@ function analyseTermoOutorgaText(text = "") {
   }
 
   // Se não encontrou na 1ª página, procurar nas demais
-  console.log("[v0] - 'Período' não encontrado na 1ª página, procurando nas demais...")
+  console.log("[v0] - ✗ 'Período' não encontrado na 1ª página, procurando nas demais...")
 
   for (let i = 1; i < pages.length; i++) {
     resultado = extractPeriodoFromText(pages[i], i + 1)
     if (resultado) {
-      console.log("[v0] - AVISO: Vigência encontrada fora da 1ª página (página", resultado.pagina, ")")
+      console.log("[v0] - ⚠️ AVISO: Vigência encontrada fora da 1ª página (página", resultado.pagina, ")")
 
       // Extrair valor máximo
       const valueMatches = collectMatches(/(?:r\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d{2})/gi, simplified)
@@ -658,14 +687,13 @@ function analyseTermoOutorgaText(text = "") {
         _metadata: {
           pagina: resultado.pagina,
           confianca: resultado.confianca,
-          aviso: "Campo 'Período' não encontrado na 1ª página; extração feita fora do cabeçalho.",
         },
       }
     }
   }
 
-  // Nenhuma vigência encontrada em todo o documento
-  console.log("[v0] - ERRO: Campo 'Período' não localizado no documento")
+  console.log("[v0] - ✗✗✗ ERRO: 'Período' não encontrado em nenhuma página do documento")
+  console.log("[v0] - Retornando valores nulos")
 
   return {
     vigenciaInicio: null,
@@ -674,11 +702,7 @@ function analyseTermoOutorgaText(text = "") {
     trechoOriginal: "",
     valorMaximoRaw: "",
     valorMaximo: null,
-    _metadata: {
-      erro: "vigencia_nao_identificada",
-      detalhe: "Campo 'Período' não localizado no documento",
-      confianca: 0.0,
-    },
+    _error: "Campo 'Período' não encontrado no documento",
   }
 }
 
