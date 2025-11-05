@@ -395,7 +395,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
 
-      const vigenciaISO = row?.termo?.vigenciaFim || row?.termo?.vigenciaISO
+      const vigenciaISO = row?.termo?.fim_vigencia || row?.termo?.vigenciaFim || row?.termo?.vigenciaISO
       const valorMax = row?.termo?.valorMaximo
       const valorBolsa = row?.valor
 
@@ -472,8 +472,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         `)
       }
 
-      const inicioVigencia = data.parsed?.inicio_vigencia
-      const fimVigencia = data.parsed?.fim_vigencia || data.parsed?.vigenciaISO
+      const inicioVigencia = data.parsed?.inicio_vigencia || data.parsed?.vigenciaInicio
+      const fimVigencia = data.parsed?.fim_vigencia || data.parsed?.vigenciaFim || data.parsed?.vigenciaISO
       const fonteTexto = data.parsed?.fonte_texto || data.parsed?.vigenciaRaw
 
       let vigenciaText = ""
