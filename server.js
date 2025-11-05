@@ -877,6 +877,174 @@ app.use("/api", uploadsRouter)
 app.use("/api", parseDocsRouter)
 app.use("/api", vendorsRouter)
 app.use("/api", purchasesRouter) // interno (este arquivo)
+
+// New route for parsing termo de outorga
+const extractTextFromPDF = async (filePath) => {
+  if (!filePath || !fs.existsSync(filePath)) return ""
+  try {
+    const pdfParse = (await import("pdf-parse")).default
+    const buffer = fs.readFileSync(filePath)
+    const data = await pdfParse(buffer)
+    return (data?.text || "").replace(/\u0000/g, " ").trim()
+  } catch (e) {
+    console.warn("[pdf-parse] falhou:", e?.message || e)
+    return ""
+  }
+}
+
+const analyseTermoOutorgaText = (text) => {
+  const data = {
+    numero: "",
+    dataAssinatura: "",
+    orgao: "",
+    objeto: "",
+    valor: "",
+    dataInicioVigencia: "",
+    dataFimVigencia: "",
+  }
+
+  // Regex for Termo de Outorga number (adapt as needed)
+  const numeroMatch = text.match(/(?:TERMO DE OUTORGA|TERMO N.?)\s*(\d{4}\/\d{2,4})/i)
+  if (numeroMatch && numeroMatch[1]) data.numero = numeroMatch[1]
+
+  // Regex for Signature Date (adapt as needed)
+  const dataAssinaturaMatch = text.match(/(\d{2})\s+de\s+(\w+)\s+de\s+(\d{4})/i)
+  if (dataAssinaturaMatch) {
+    data.dataAssinatura = `${dataAssinaturaMatch[3]}-${String(getMonthIndex(dataAssinaturaMatch[2]) + 1).padStart(2, "0")}-${dataAssinaturaMatch[1].padStart(2, "0")}`
+  }
+
+  // Regex for Issuing Body (adapt as needed)
+  const orgaoMatch = text.match(/emitido por|órgão emissor:\s*(.+)/i)
+  if (orgaoMatch && orgaoMatch[1]) data.orgao = orgaoMatch[1].split("\n")[0].trim()
+
+  // Regex for Object (adapt as needed)
+  const objetoMatch = text.match(/OBJETO:\s*(.+?)(?:VALOR:|VIGÊNCIA|DATA DE INÍCIO)/i)
+  if (objetoMatch && objetoMatch[1]) data.objeto = objetoMatch[1].trim().replace(/\s+/g, " ")
+
+  // Regex for Value (adapt as needed)
+  const valorMatch = text.match(/VALOR:\s*(R\$[\s\d.,]+)/i)
+  if (valorMatch && valorMatch[1]) data.valor = valorMatch[1].trim()
+
+  // Regex for Validity Start Date (adapt as needed)
+  const vigenciaInicioMatch = text.match(/DATA DE INÍCIO DA VIGÊNCIA:\s*(\d{2}\/\d{2}\/\d{4})/i)
+  if (vigenciaInicioMatch && vigenciaInicioMatch[1]) data.dataInicioVigencia = vigenciaInicioMatch[1]
+
+  // Regex for Validity End Date (adapt as needed)
+  const vigenciaFimMatch = text.match(/DATA DE FIM DA VIGÊNCIA:\s*(\d{2}\/\d{2}\/\d{4})/i)
+  if (vigenciaFimMatch && vigenciaFimMatch[1]) data.dataFimVigencia = vigenciaFimMatch[1]
+
+  // Fallback for dates if not found explicitly
+  if (!data.dataAssinatura) {
+    const dateMatch = text.match(/(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})/i)
+    if (dateMatch) {
+      const day = dateMatch[1].padStart(2, "0")
+      const monthStr = dataAssinaturaMatch[2]
+      const year = dateMatch[3]
+      const monthIndex = getMonthIndex(monthStr)
+      if (monthIndex !== -1) {
+        data.dataAssinatura = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${day}`
+      }
+    }
+  }
+
+  return data
+}
+
+// Helper function to get month index from name
+const getMonthIndex = (monthName) => {
+  const months = [
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
+  ]
+  return months.indexOf(monthName.toLowerCase())
+}
+
+// Assuming 'upload' is configured or imported elsewhere if this code snippet is isolated.
+// For this merge, we'll assume 'upload' is available.
+// If not, you'll need to import or configure it.
+// For example:
+// import multer from 'multer';
+// const upload = multer({ dest: 'data/uploads/' }); // Example configuration
+// For now, let's assume it's available globally or imported prior to this snippet.
+
+// Mocking 'upload' for now if it's not defined in the context.
+// In a real scenario, this would come from an import like 'multer'.
+const upload = {
+  single: (fieldName) => (req, res, next) => {
+    // This is a placeholder. In a real app, multer would handle the file upload.
+    // For the purpose of this merge, we'll simulate req.file based on the logic.
+    // The actual file handling is done within the route handler using req.file.path.
+    console.log("Mock upload.single called")
+    // Simulate file object for req.file if it's expected to be used directly.
+    // In this specific case, the handler extracts path from req.file.path, so we need to ensure it's present.
+    // The file upload middleware (express-fileupload) populates req.files, not req.file typically.
+    // The original update seems to expect 'upload.single' from multer, which populates req.file.
+    // Let's adjust to work with express-fileupload as present in the main server.js.
+    const files = normalizeIncomingFiles(req) // Using the existing normalize function
+    if (files.length > 0) {
+      req.file = {
+        // Simulate multer's req.file structure
+        path: files[0].tempFilePath || files[0].path, // Use path from express-fileupload
+        originalname: files[0].name || files[0].originalname,
+        size: files[0].size,
+        mimetype: files[0].mimetype,
+      }
+    }
+    next()
+  },
+}
+
+app.post("/api/parse-termo", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, message: "Nenhum arquivo enviado." })
+    }
+
+    const filePath = req.file.path
+    const fileName = req.file.originalname
+
+    console.log("[v0] Parsing termo de outorga:", fileName)
+
+    const rawText = await extractTextFromPDF(filePath)
+    console.log("[v0] Extracted text length:", rawText?.length || 0)
+
+    const parsed = analyseTermoOutorgaText(rawText)
+    console.log("[v0] Parsed termo result:", JSON.stringify(parsed, null, 2))
+
+    // Clean up the temporary file created by express-fileupload
+    fs.unlinkSync(filePath)
+
+    res.json({
+      ok: true,
+      fileName,
+      size: req.file.size,
+      rawText,
+      parsed,
+    })
+  } catch (err) {
+    console.error("[v0] Error parsing termo:", err)
+    // Ensure cleanup even if an error occurs
+    if (req.file?.path) {
+      try {
+        fs.unlinkSync(req.file.path)
+      } catch (cleanupErr) {
+        console.error("[v0] Error during cleanup:", cleanupErr)
+      }
+    }
+    res.status(500).json({ ok: false, message: err.message || "Erro ao processar o termo." })
+  }
+})
+
 // app.use("/api/generate", generateDocsRouter);     // ❌ desabilitar
 // registerDocRoutes(app, { openai, TEMPLATE_BASE }); // ❌ desabilitar
 app.use("/api", cnpjProxyRouter)
