@@ -281,59 +281,86 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const analyseTermoText = (text = "") => {
-      const simplified = text.replace(/\s+/g, " ")
-      const lower = simplified.toLowerCase()
+      const simplified = text.replace(/\s+/g, " ").trim()
+      const normalizedText = simplified.replace(/Período/gi, "Periodo").replace(/período/gi, "periodo")
 
-      const dateRegex = /(\d{4}[/-]\d{1,2}[/-]\d{1,2})|(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/g
-      const valueRegex = /(?:r\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d{2})/gi
+      // Tentar encontrar "Periodo: DD/MM/YYYY até DD/MM/YYYY"
+      const periodoRegex =
+        /periodo\s*[:\-–—]?\s*(\d{2}[/.-]\d{2}[/.-]\d{4})\s*(?:até|ate|at[ée]|a)\s*(\d{2}[/.-]\d{2}[/.-]\d{4})/gi
 
-      const dateMatches = collectMatches(dateRegex, simplified)
-      const valueMatches = collectMatches(valueRegex, simplified)
+      const match = periodoRegex.exec(normalizedText)
 
-      const pickByKeyword = (matches, keywords) => {
-        if (!matches.length) return null
-        let best = null
-        matches.forEach((item) => {
-          const start = Math.max(0, item.index - 80)
-          const end = Math.min(simplified.length, item.index + item.match.length + 80)
-          const context = lower.slice(start, end)
-          let score = 0
-          keywords.forEach((kw, idx) => {
-            if (kw.test(context)) score += (idx + 1) * 2
-          })
-          if (score === 0) score = 1 // fallback para algum valor
-          if (!best || score > best.score || (score === best.score && item.index > best.index)) {
-            best = { ...item, score }
+      if (match) {
+        const inicio = toISODate(match[1])
+        const fim = toISODate(match[2])
+
+        if (inicio && fim) {
+          return {
+            inicio_vigencia: inicio > fim ? fim : inicio,
+            fim_vigencia: inicio > fim ? inicio : fim,
+            fonte_texto: match[0],
+            valorMaximoRaw: "",
+            valorMaximo: null,
           }
-        })
-        return best
+        }
       }
 
-      const chosenDateInicio = pickByKeyword(dateMatches, [
-        /(in[íi]cio\s+da\s+vig[êe]ncia|início\s+da\s+vigência)/,
-        /(in[íi]cio\s+vig[êe]ncia|início\s+vigência)/,
-      ])
-      const chosenDateFim = pickByKeyword(dateMatches, [
-        /(vig[êe]ncia|vigência)/,
-        /(t[ée]rmino|termino|fim)/,
-        /(at[ée])/,
-      ])
-      const chosenValue = pickByKeyword(valueMatches, [/(valor|bolsa|limite|total|montante)/])
+      // Fallback: buscar todas as datas
+      const dateRegex = /(\d{2}[/.-]\d{2}[/.-]\d{4})/g
+      const allDates = []
+      let dateMatch
 
-      const vigenciaInicioRaw = chosenDateInicio?.match || ""
-      const vigenciaInicioISO = vigenciaInicioRaw ? toISODate(vigenciaInicioRaw) : null
-      const vigenciaFimRaw = chosenDateFim?.match || ""
-      const vigenciaFimISO = vigenciaFimRaw ? toISODate(vigenciaFimRaw) : null
+      while ((dateMatch = dateRegex.exec(simplified)) !== null) {
+        const isoDate = toISODate(dateMatch[1])
+        if (isoDate) {
+          allDates.push({
+            raw: dateMatch[1],
+            iso: isoDate,
+            index: dateMatch.index,
+          })
+        }
+      }
 
-      const valorRaw = chosenValue?.match || ""
-      const valorMax = valorRaw ? parseMoney(valorRaw) : null
+      if (allDates.length >= 2) {
+        const periodoIndex = normalizedText.toLowerCase().indexOf("periodo")
 
+        if (periodoIndex !== -1) {
+          const datesAfterPeriodo = allDates.filter((d) => d.index > periodoIndex)
+
+          if (datesAfterPeriodo.length >= 2) {
+            const inicio = datesAfterPeriodo[0].iso
+            const fim = datesAfterPeriodo[1].iso
+
+            return {
+              inicio_vigencia: inicio > fim ? fim : inicio,
+              fim_vigencia: inicio > fim ? inicio : fim,
+              fonte_texto: `Período: ${datesAfterPeriodo[0].raw} até ${datesAfterPeriodo[1].raw}`,
+              valorMaximoRaw: "",
+              valorMaximo: null,
+            }
+          }
+        }
+
+        // Usar as duas primeiras datas
+        const inicio = allDates[0].iso
+        const fim = allDates[1].iso
+
+        return {
+          inicio_vigencia: inicio > fim ? fim : inicio,
+          fim_vigencia: inicio > fim ? inicio : fim,
+          fonte_texto: `${allDates[0].raw} até ${allDates[1].raw}`,
+          valorMaximoRaw: "",
+          valorMaximo: null,
+        }
+      }
+
+      // Se não encontrou nada, retornar null
       return {
-        inicio_vigencia: vigenciaInicioISO,
-        fim_vigencia: vigenciaFimISO,
-        fonte_texto: vigenciaInicioRaw || vigenciaFimRaw,
-        valorMaximoRaw: valorRaw,
-        valorMaximo: valorMax,
+        inicio_vigencia: null,
+        fim_vigencia: null,
+        fonte_texto: "",
+        valorMaximoRaw: "",
+        valorMaximo: null,
       }
     }
 

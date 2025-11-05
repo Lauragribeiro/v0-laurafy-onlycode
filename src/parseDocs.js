@@ -239,8 +239,8 @@ function extractNF9FromText(txt = "") {
   const t = String(txt).replace(/\s+/g, " ")
 
   const nearNF = [
-    /(?:nf[\s-]*e|nota\s*fiscal|danfe)[^]{0,80}?(?:n[ºo.]|nro|no)\s*[:-]?\s*([0-9.\s]{3,20})/i,
-    /(?:n[ºo.]|nro|no)\s*[:-]?\s*([0-9.\s]{3,20})\s*(?:\/\s*serie|\bser[ií]e\b|(?:da)?\s*nf[\s-]*e|danfe)/i,
+    /(?:nf[\s-]*e|nota\s*fiscal|danfe)[^]{0,80}?(?:n[ºo]|nro|no)\s*[:-]?\s*([0-9.\s]{3,20})/i,
+    /(?:n[ºo]|nro|no)\s*[:-]?\s*([0-9.\s]{3,20})\s*(?:\/\s*serie|\bser[ií]e\b|(?:da)?\s*nf[\s-]*e|danfe)/i,
   ]
   for (const rx of nearNF) {
     const m = t.match(rx)
@@ -518,32 +518,34 @@ function analyseTermoOutorgaText(text = "") {
     }
   }
 
-  console.log("[v0] analyseTermoOutorgaText - Iniciando análise do termo de outorga")
+  console.log("[v0] analyseTermoOutorgaText - Iniciando análise")
   console.log("[v0] - Tamanho do texto:", simplified.length, "caracteres")
-  console.log("[v0] - Primeiros 2000 caracteres do texto:", simplified.substring(0, 2000))
+  console.log("[v0] - Primeiros 2000 caracteres:", simplified.substring(0, 2000))
 
-  // Procurar por "Período:" seguido de duas datas
-  // Regex mais flexível que aceita variações de espaçamento
+  // Normalizar o texto para facilitar a busca (remover acentos de "Período")
+  const normalizedText = simplified.replace(/Período/gi, "Periodo").replace(/período/gi, "periodo")
+
+  // Regex muito flexível para capturar "Periodo: DD/MM/YYYY até DD/MM/YYYY"
   const periodoRegex =
-    /per[íi]odo\s*[:\-–—]?\s*(\d{2}[/.-]\d{2}[/.-]\d{4})\s*(?:até|at[ée]|a)\s*(\d{2}[/.-]\d{2}[/.-]\d{4})/gi
+    /periodo\s*[:\-–—]?\s*(\d{2}[/.-]\d{2}[/.-]\d{4})\s*(?:até|ate|at[ée]|a)\s*(\d{2}[/.-]\d{2}[/.-]\d{4})/gi
 
-  const match = periodoRegex.exec(simplified)
+  const match = periodoRegex.exec(normalizedText)
 
   if (match) {
-    console.log("[v0] - ✓✓ ENCONTRADO 'Período:' com datas:", match[0])
+    console.log("[v0] - ✓ ENCONTRADO 'Periodo:' com datas:", match[0])
     console.log("[v0] - Data início extraída:", match[1])
     console.log("[v0] - Data fim extraída:", match[2])
 
     const inicio = toISODateTermo(match[1])
     const fim = toISODateTermo(match[2])
 
-    console.log("[v0] - Data início normalizada (ISO):", inicio)
-    console.log("[v0] - Data fim normalizada (ISO):", fim)
+    console.log("[v0] - Data início ISO:", inicio)
+    console.log("[v0] - Data fim ISO:", fim)
 
     if (inicio && fim) {
-      // Validar que início <= fim
+      // Validar que início <= fim, inverter se necessário
       if (inicio > fim) {
-        console.log("[v0] - AVISO: Data início > fim, invertendo...")
+        console.log("[v0] - AVISO: Invertendo datas (início > fim)")
         return {
           inicio_vigencia: fim,
           fim_vigencia: inicio,
@@ -554,8 +556,7 @@ function analyseTermoOutorgaText(text = "") {
         }
       }
 
-      console.log("[v0] - ✓✓✓ Vigência extraída com sucesso:", inicio, "até", fim)
-
+      console.log("[v0] - ✓✓ Vigência extraída com sucesso!")
       return {
         inicio_vigencia: inicio,
         fim_vigencia: fim,
@@ -564,15 +565,12 @@ function analyseTermoOutorgaText(text = "") {
         valorMaximoRaw: "",
         valorMaximo: null,
       }
-    } else {
-      console.log("[v0] - ERRO: Datas inválidas após normalização")
     }
   }
 
-  // Se não encontrou com a primeira regex, tentar buscar qualquer padrão de duas datas próximas
-  console.log("[v0] - Tentando busca alternativa por duas datas próximas...")
+  // Fallback: buscar todas as datas válidas no documento
+  console.log("[v0] - Fallback: buscando todas as datas no documento")
 
-  // Buscar todas as datas no formato DD/MM/YYYY ou DD.MM.YYYY
   const dateRegex = /(\d{2}[/.-]\d{2}[/.-]\d{4})/g
   const allDates = []
   let dateMatch
@@ -586,28 +584,27 @@ function analyseTermoOutorgaText(text = "") {
         iso: isoDate,
         index: dateMatch.index,
       })
+      console.log("[v0] - Data encontrada:", dateStr, "->", isoDate, "na posição", dateMatch.index)
     }
   }
 
   console.log("[v0] - Total de datas válidas encontradas:", allDates.length)
 
   if (allDates.length >= 2) {
-    // Procurar por "Período" no texto e pegar as duas primeiras datas após essa palavra
-    const periodoIndex = simplified.toLowerCase().indexOf("período")
+    // Procurar por "Periodo" no texto
+    const periodoIndex = normalizedText.toLowerCase().indexOf("periodo")
 
     if (periodoIndex !== -1) {
-      console.log("[v0] - Encontrado 'Período' na posição:", periodoIndex)
+      console.log("[v0] - Encontrado 'Periodo' na posição:", periodoIndex)
 
-      // Filtrar datas que aparecem depois de "Período"
+      // Pegar as duas primeiras datas após "Periodo"
       const datesAfterPeriodo = allDates.filter((d) => d.index > periodoIndex)
 
       if (datesAfterPeriodo.length >= 2) {
         const inicio = datesAfterPeriodo[0].iso
         const fim = datesAfterPeriodo[1].iso
 
-        console.log("[v0] - ✓✓ Usando as duas primeiras datas após 'Período'")
-        console.log("[v0] - Data início:", inicio, "(raw:", datesAfterPeriodo[0].raw, ")")
-        console.log("[v0] - Data fim:", fim, "(raw:", datesAfterPeriodo[1].raw, ")")
+        console.log("[v0] - ✓ Usando datas após 'Periodo':", inicio, "até", fim)
 
         if (inicio > fim) {
           return {
@@ -631,13 +628,10 @@ function analyseTermoOutorgaText(text = "") {
       }
     }
 
-    // Se não encontrou "Período", usar as duas primeiras datas válidas do documento
-    console.log("[v0] - Usando as duas primeiras datas válidas do documento")
+    // Último fallback: usar as duas primeiras datas do documento
+    console.log("[v0] - Usando as duas primeiras datas do documento")
     const inicio = allDates[0].iso
     const fim = allDates[1].iso
-
-    console.log("[v0] - Data início:", inicio, "(raw:", allDates[0].raw, ")")
-    console.log("[v0] - Data fim:", fim, "(raw:", allDates[1].raw, ")")
 
     if (inicio > fim) {
       return {
@@ -660,10 +654,7 @@ function analyseTermoOutorgaText(text = "") {
     }
   }
 
-  // Fallback: retornar vazio se não encontrar
-  console.log("[v0] - ERRO: Não foi possível extrair vigência do termo de outorga")
-  console.log("[v0] - Datas encontradas:", allDates.length)
-
+  console.log("[v0] - ERRO: Não foi possível extrair vigência")
   return {
     inicio_vigencia: null,
     fim_vigencia: null,
