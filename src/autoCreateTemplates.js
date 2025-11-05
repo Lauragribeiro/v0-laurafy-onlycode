@@ -463,7 +463,6 @@ function createMapaCotacaoVertex() {
           }),
           new Paragraph({
             children: [createPlaceholderText("justificativa")],
-            spacing: { after: 400 },
           }),
 
           new Paragraph({
@@ -571,9 +570,7 @@ function templateExists(filePath, fileName) {
 }
 
 export async function ensureTemplatesExist() {
-  console.log("[autoCreateTemplates] ========================================")
   console.log("[autoCreateTemplates] 🚀 Iniciando verificação de templates...")
-  console.log("[autoCreateTemplates] ========================================")
   console.log(`[autoCreateTemplates] 📁 Diretório base: ${TEMPLATES_DIR}`)
 
   const dirs = [TEMPLATES_DIR, FOLHA_DIR, MAPA_DIR, DISPENSA_DIR]
@@ -582,13 +579,10 @@ export async function ensureTemplatesExist() {
       console.log(`[autoCreateTemplates] 📂 Criando diretório: ${dir}`)
       try {
         fs.mkdirSync(dir, { recursive: true })
-        console.log(`[autoCreateTemplates] ✅ Diretório criado: ${dir}`)
       } catch (error) {
         console.error(`[autoCreateTemplates] ❌ Erro ao criar diretório ${dir}:`, error.message)
         return 0
       }
-    } else {
-      console.log(`[autoCreateTemplates] ✓ Diretório existe: ${dir}`)
     }
   }
 
@@ -601,18 +595,10 @@ export async function ensureTemplatesExist() {
   ]
 
   let created = 0
-  let checked = 0
-  let failed = 0
 
   for (const template of templates) {
-    checked++
-    const fullPath = path.join(template.dir, template.name)
-
-    console.log(`[autoCreateTemplates] ----------------------------------------`)
-    console.log(`[autoCreateTemplates] 🔍 Verificando template ${checked}/${templates.length}: ${template.name}`)
-
     if (!templateExists(template.dir, template.name)) {
-      console.log(`[autoCreateTemplates] ⚠️  Template ausente, criando...`)
+      console.log(`[autoCreateTemplates] ⚠️  Template ausente, criando: ${template.name}`)
 
       try {
         const doc = template.create()
@@ -620,52 +606,18 @@ export async function ensureTemplatesExist() {
 
         if (success) {
           created++
-          console.log(`[autoCreateTemplates] ✅ Template criado: ${template.name}`)
-        } else {
-          failed++
-          console.error(`[autoCreateTemplates] ❌ Falha ao criar: ${template.name}`)
         }
       } catch (error) {
-        failed++
         console.error(`[autoCreateTemplates] ❌ Erro ao criar ${template.name}:`, error.message)
-        console.error(`[autoCreateTemplates] Stack:`, error.stack)
       }
-    } else {
-      console.log(`[autoCreateTemplates] ✓ Template já existe: ${template.name}`)
     }
   }
 
-  console.log(`[autoCreateTemplates] ========================================`)
-  console.log(`[autoCreateTemplates] 📊 Verificação concluída:`)
-  console.log(`[autoCreateTemplates]   - Templates verificados: ${checked}`)
-  console.log(`[autoCreateTemplates]   - Templates criados: ${created}`)
-  console.log(`[autoCreateTemplates]   - Falhas: ${failed}`)
-  console.log(`[autoCreateTemplates] ========================================`)
-
-  console.log(`[autoCreateTemplates] 📋 Listando templates críticos:`)
-  const criticalTemplates = [
-    path.join(FOLHA_DIR, "folha_rosto_edge.docx"),
-    path.join(FOLHA_DIR, "folha_rosto_vertex.docx"),
-    path.join(MAPA_DIR, "mapa_edge.docx"),
-    path.join(MAPA_DIR, "mapa_vertex.docx"),
-  ]
-
-  for (const templatePath of criticalTemplates) {
-    const exists = fs.existsSync(templatePath)
-    const status = exists ? "✅ EXISTE" : "❌ AUSENTE"
-    const size = exists ? `(${fs.statSync(templatePath).size} bytes)` : ""
-    console.log(`[autoCreateTemplates]   ${status} ${path.basename(templatePath)} ${size}`)
-  }
-
   if (created > 0) {
-    console.log(`[autoCreateTemplates] ✅ ${created} template(s) criado(s) com sucesso`)
+    console.log(`[autoCreateTemplates] ✅ ${created} template(s) criado(s)`)
+  } else {
+    console.log(`[autoCreateTemplates] ✓ Todos os templates já existem`)
   }
-
-  if (failed > 0) {
-    console.error(`[autoCreateTemplates] ⚠️  ${failed} template(s) falharam ao ser criados`)
-  }
-
-  console.log(`[autoCreateTemplates] ========================================`)
 
   return created
 }
