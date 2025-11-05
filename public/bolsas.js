@@ -48,6 +48,7 @@ export const buildBolsistaRecord = ({
   termoUpload = null,
   fallbackTermo = null,
   existingRecord = null,
+  periodosVinculados = [],
 } = {}) => {
   const now = new Date().toISOString()
   const id = editingId ?? Date.now()
@@ -105,9 +106,9 @@ export const buildBolsistaRecord = ({
     funcao,
     valor: valorNum,
     termo,
-    criadoEm: existingRecord?.criadoEm || now,
-    atualizadoEm: now,
     historicoAlteracoes,
+    periodos_vinculados: Array.isArray(periodosVinculados) ? [...periodosVinculados] : [],
+    updatedAt: now,
   }
 }
 
@@ -621,10 +622,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const tabDoc = document.getElementById("tab-docfin")
     const tabBolsas = document.getElementById("tab-bolsas")
 
+    const periodoMesInput = document.getElementById("campo-periodo-mes")
+    const periodoAnoInput = document.getElementById("campo-periodo-ano")
+    const btnAdicionarPeriodo = document.getElementById("btn-adicionar-periodo")
+    const periodosChipsContainer = document.getElementById("periodos-chips")
+    const periodosEmpty = document.getElementById("periodos-empty")
+    const filtroPeriodo = document.getElementById("filtro-periodo")
+    const btnExportarExcel = document.getElementById("btn-exportar-excel")
+
     let projectId = ""
     let bolsistas = []
     let editingId = null
     let termoUpload = null
+    let currentPeriodosVinculados = []
 
     const storageKey = () => `bolsas_${projectId || "default"}`
 
@@ -681,13 +691,24 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
     const renderTable = () => {
       if (!tableBody) return
-      if (!Array.isArray(bolsistas) || bolsistas.length === 0) {
+
+      const periodoFiltro = filtroPeriodo?.value || ""
+      let bolsistasFiltrados = bolsistas
+
+      if (periodoFiltro) {
+        bolsistasFiltrados = bolsistas.filter((row) => {
+          const periodos = row.periodos_vinculados || []
+          return periodos.includes(periodoFiltro)
+        })
+      }
+
+      if (!Array.isArray(bolsistasFiltrados) || bolsistasFiltrados.length === 0) {
         tableBody.innerHTML =
-          '<tr class="table-empty"><td colspan="5">Nenhum bolsista cadastrado até o momento.</td></tr>'
+          '<tr class="table-empty"><td colspan="6">Nenhum bolsista cadastrado até o momento.</td></tr>'
         return
       }
 
-      const rowsHtml = bolsistas
+      const rowsHtml = bolsistasFiltrados
         .map(
           (row) => `
         <tr data-id="${escapeHtml(String(row.id))}" class="table-row">
@@ -695,6 +716,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           <td>${escapeHtml(formatCPF(row.cpf))}</td>
           <td>${escapeHtml(row.funcao || "")}</td>
           <td>${escapeHtml(formatBRL(row.valor))}</td>
+          <td>${renderPeriodosVinculados(row)}</td>
           <td>${renderIndicator(row)}</td>
         </tr>
       `,
@@ -702,6 +724,167 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         .join("")
 
       tableBody.innerHTML = rowsHtml
+    }
+
+    const renderPeriodosVinculados = (row) => {
+      const periodos = row.periodos_vinculados || []
+      if (periodos.length === 0) {
+        return '<span class="tiny muted">Nenhum período cadastrado</span>'
+      }
+      return periodos.map((p) => `<span class="chip">${escapeHtml(p)}</span>`).join(" ")
+    }
+
+    const updateFiltroPeriodo = () => {
+      if (!filtroPeriodo) return
+
+      const todosOsPeriodos = new Set()
+      bolsistas.forEach((row) => {
+        const periodos = row.periodos_vinculados || []
+        periodos.forEach((p) => todosOsPeriodos.add(p))
+      })
+
+      const periodosOrdenados = Array.from(todosOsPeriodos).sort((a, b) => {
+        const [mesA, anoA] = a.split("/").map(Number)
+        const [mesB, anoB] = b.split("/").map(Number)
+        if (anoA !== anoB) return anoA - anoB
+        return mesA - mesB
+      })
+
+      const currentValue = filtroPeriodo.value
+      filtroPeriodo.innerHTML =
+        '<option value="">Todos os períodos</option>' +
+        periodosOrdenados.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("")
+
+      if (currentValue && periodosOrdenados.includes(currentValue)) {
+        filtroPeriodo.value = currentValue
+      }
+    }
+
+    const exportarParaExcel = () => {
+      if (!window.XLSX) {
+        alert("Biblioteca XLSX não carregada. Por favor, recarregue a página.")
+        return
+      }
+
+      const periodoFiltro = filtroPeriodo?.value || ""
+      let bolsistasFiltrados = bolsistas
+
+      if (periodoFiltro) {
+        bolsistasFiltrados = bolsistas.filter((row) => {
+          const periodos = row.periodos_vinculados || []
+          return periodos.includes(periodoFiltro)
+        })
+      }
+
+      if (bolsistasFiltrados.length === 0) {
+        alert("Nenhum bolsista para exportar.")
+        return
+      }
+
+      const dados = bolsistasFiltrados.map((row) => {
+        const indicator = computeIndicator(row)
+        const periodos = row.periodos_vinculados || []
+
+        return {
+          "Nome Completo": row.nome || "",
+          CPF: formatCPF(row.cpf),
+          "Função no Projeto": row.funcao || "",
+          "Valor da Bolsa": formatBRL(row.valor),
+          "Período de Vinculação": periodos.join(", "),
+          "Status Vigência": indicator.status === "vigente" ? "Vigente" : "Não Vigente",
+          "Detalhes Vigência": indicator.vigenciaDetail,
+          "Detalhes Valor": indicator.valorDetail,
+        }
+      })
+
+      const ws = window.XLSX.utils.json_to_sheet(dados)
+      const wb = window.XLSX.utils.book_new()
+      window.XLSX.utils.book_append_sheet(wb, ws, "Recursos Humanos")
+
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 16).replace("T", "_").replace(/:/g, "-")
+      const filename = `recursos_humanos_${timestamp}.xlsx`
+
+      window.XLSX.writeFile(wb, filename)
+    }
+
+    const adicionarPeriodo = () => {
+      const mes = periodoMesInput?.value
+      const ano = periodoAnoInput?.value
+
+      if (!mes || !ano) {
+        alert("Por favor, informe o mês e o ano.")
+        return
+      }
+
+      const mesNum = Number.parseInt(mes, 10)
+      const anoNum = Number.parseInt(ano, 10)
+
+      if (mesNum < 1 || mesNum > 12) {
+        alert("Mês deve estar entre 1 e 12.")
+        return
+      }
+
+      if (anoNum < 2020 || anoNum > 2099) {
+        alert("Ano deve estar entre 2020 e 2099.")
+        return
+      }
+
+      const periodo = `${String(mesNum).padStart(2, "0")}/${anoNum}`
+
+      if (currentPeriodosVinculados.includes(periodo)) {
+        alert("Este período já foi adicionado.")
+        return
+      }
+
+      currentPeriodosVinculados.push(periodo)
+      renderPeriodosChips()
+
+      if (periodoMesInput) periodoMesInput.value = ""
+      if (periodoAnoInput) periodoAnoInput.value = ""
+      periodoMesInput?.focus()
+    }
+
+    const removerPeriodo = (periodo) => {
+      currentPeriodosVinculados = currentPeriodosVinculados.filter((p) => p !== periodo)
+      renderPeriodosChips()
+    }
+
+    const renderPeriodosChips = () => {
+      if (!periodosChipsContainer) return
+
+      if (currentPeriodosVinculados.length === 0) {
+        periodosChipsContainer.innerHTML =
+          '<span class="tiny muted" id="periodos-empty">Nenhum período adicionado.</span>'
+        return
+      }
+
+      const chipsHtml = currentPeriodosVinculados
+        .sort((a, b) => {
+          const [mesA, anoA] = a.split("/").map(Number)
+          const [mesB, anoB] = b.split("/").map(Number)
+          if (anoA !== anoB) return anoA - anoB
+          return mesA - mesB
+        })
+        .map(
+          (periodo) => `
+          <span class="chip" style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: #e3f2fd; border-radius: 16px; font-size: 0.875rem;">
+            ${escapeHtml(periodo)}
+            <button type="button" class="chip-remove" data-periodo="${escapeHtml(periodo)}" style="background: none; border: none; cursor: pointer; padding: 0; margin: 0; font-size: 1rem; line-height: 1; color: #666;" title="Remover">×</button>
+          </span>
+        `,
+        )
+        .join("")
+
+      periodosChipsContainer.innerHTML = chipsHtml
+
+      periodosChipsContainer.querySelectorAll(".chip-remove").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault()
+          const periodo = btn.dataset.periodo
+          removerPeriodo(periodo)
+        })
+      })
     }
 
     const wireTableClicks = () => {
@@ -745,6 +928,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       setTermoFeedback("")
       updateHistoricoSection(null)
       termoUpload = null
+      currentPeriodosVinculados = []
+      renderPeriodosChips()
     }
 
     const openCreateModal = () => {
@@ -774,6 +959,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       }
       if (funcaoInput) funcaoInput.value = row.funcao || ""
       if (valorInput) valorInput.value = formatBRL(row.valor) || ""
+
+      currentPeriodosVinculados = Array.isArray(row.periodos_vinculados) ? [...row.periodos_vinculados] : []
+      renderPeriodosChips()
 
       const termo = row.termo || null
       if (termo) {
@@ -830,6 +1018,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       valorInput?.addEventListener("blur", normalizeValorInput)
       cpfInput?.addEventListener("blur", normalizeCPFInput)
 
+      btnAdicionarPeriodo?.addEventListener("click", adicionarPeriodo)
+
+      periodoMesInput?.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault()
+          periodoAnoInput?.focus()
+        }
+      })
+
+      periodoAnoInput?.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault()
+          adicionarPeriodo()
+        }
+      })
+
       btnSelecionarTermo?.addEventListener("click", () => {
         termoInput?.click()
       })
@@ -871,86 +1075,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       })
     }
 
-    const handleModalSubmit = (ev) => {
-      ev.preventDefault()
-      setFormFeedback("")
+    const wireButtons = () => {
+      btnNovo?.addEventListener("click", openCreateModal)
+      btnClose?.addEventListener("click", closeModal)
+      btnCancelar?.addEventListener("click", closeModal)
 
-      const nome = nomeInput?.value.trim()
-      const cpfDigits = onlyDigits(cpfInput?.value || "")
-      const funcao = funcaoInput?.value.trim()
-      const valorNum = parseMoney(valorInput?.value)
-
-      if (!nome) {
-        setFormFeedback("Informe o nome completo do bolsista.", "error")
-        nomeInput?.focus()
-        return
-      }
-      if (nome.length > 255) {
-        setFormFeedback("O nome completo deve ter no máximo 255 caracteres.", "error")
-        nomeInput?.focus()
-        return
-      }
-
-      if (!cpfDigits || cpfDigits.length !== 11 || !validateCPF(cpfDigits)) {
-        setFormFeedback("Informe um CPF válido (11 dígitos).", "error")
-        cpfInput?.focus()
-        return
-      }
-
-      if (!funcao) {
-        setFormFeedback("Informe a função do bolsista no projeto.", "error")
-        funcaoInput?.focus()
-        return
-      }
-
-      if (valorNum == null || valorNum <= 0) {
-        setFormFeedback("Informe o valor da bolsa no formato monetário (ex.: R$ 4.500,00).", "error")
-        valorInput?.focus()
-        return
-      }
-
-      if (!editingId && !termoUpload) {
-        setFormFeedback("Faça upload do Termo de Outorga em PDF para concluir o cadastro.", "error")
-        termoInput?.focus()
-        return
-      }
-
-      const existing = editingId ? bolsistas.find((item) => String(item.id) === String(editingId)) : null
-
-      const record = buildBolsistaRecord({
-        editingId,
-        nome,
-        cpfDigits,
-        funcao,
-        valorNum,
-        termoUpload:
-          termoUpload ||
-          (existing?.termo
-            ? {
-                fileName: existing.termo.fileName,
-                parsed: {
-                  inicio_vigencia: existing.termo.inicio_vigencia || existing.termo.vigenciaInicio,
-                  fim_vigencia: existing.termo.fim_vigencia || existing.termo.vigenciaFim || existing.termo.vigenciaISO,
-                  fonte_texto: existing.termo.fonte_texto || existing.termo.vigenciaRaw,
-                  valorMaximo: existing.termo.valorMaximo,
-                  valorMaximoRaw: existing.termo.valorMaximoRaw,
-                },
-              }
-            : null),
-        fallbackTermo: existing?.termo || null,
-        existingRecord: existing || null,
-      })
-
-      console.log("[v0] handleModalSubmit - Record criado:", record)
-      console.log("[v0] handleModalSubmit - Termo data:", record.termo)
-
-      bolsistas = upsertBolsistas(bolsistas, record, editingId)
-      setFormFeedback(editingId ? "Bolsista atualizado com sucesso." : "Bolsista cadastrado com sucesso.", "success")
-
-      termoUpload = null
-      saveLocal()
-      renderTable()
-      setTimeout(() => closeModal(), 400)
+      filtroPeriodo?.addEventListener("change", renderTable)
+      btnExportarExcel?.addEventListener("click", exportarParaExcel)
     }
 
     const initTabs = () => {
@@ -995,28 +1126,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       }
     }
 
-    btnNovo?.addEventListener("click", openCreateModal)
-    btnCancelar?.addEventListener("click", (e) => {
-      e.preventDefault()
-      closeModal()
-    })
-    btnClose?.addEventListener("click", closeModal)
-    modal?.addEventListener("cancel", (e) => {
-      e.preventDefault()
-      closeModal()
-    })
-    modal?.addEventListener("click", (ev) => {
-      const content = modal.querySelector(".modal__content")
-      if (!content) return
-      if (!content.contains(ev.target)) {
-        closeModal()
+    const init = () => {
+      const params = new URLSearchParams(window.location.search)
+      projectId = params.get("id") || ""
+
+      if (projectId) {
+        loadLocal()
+        renderTable()
+        updateFiltroPeriodo()
       }
-    })
 
-    form?.addEventListener("submit", handleModalSubmit)
+      wireInputs()
+      wireButtons()
+      wireTableClicks()
+      loadProject()
+    }
 
-    wireInputs()
-    wireTableClicks()
-    loadProject()
+    init()
   })
 }
