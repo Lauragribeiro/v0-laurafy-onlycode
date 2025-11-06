@@ -1624,41 +1624,33 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         return
       }
 
-      // Criar workbook
       const wb = window.XLSX.utils.book_new()
+      const ws_data = []
 
-      // Criar dados para a planilha
-      const dados = []
+      // Cabeçalho do projeto
+      ws_data.push(["Instituição Executora:", projectNome?.textContent || "VERTEX INSTITUTO DE TECNOLOGIA E INOVAÇÃO"])
+      ws_data.push(["CNPJ:", "91.703.922/0001-28"])
+      ws_data.push(["Termo de Parceria nº:", "TPA no 268/SOFTEX/VERTEX/TIC64"])
+      ws_data.push(["Projeto:", projectNome?.textContent || "Residência em TIC 64 Programa OxeTech Academy."])
+      ws_data.push(["Prestação de Contas:", periodoFiltro])
+      ws_data.push([]) // Linha vazia
 
-      // Adicionar cabeçalho do painel
-      dados.push(["Instituição Executora:", projectNome?.textContent || ""])
-      dados.push(["CNPJ:", ""]) // Adicionar campo CNPJ se disponível
-      dados.push(["Termo de Parceria n°:", ""]) // Adicionar campo Termo de Parceria se disponível
-      dados.push(["Projeto:", projectNome?.textContent || ""])
-      dados.push(["Prestação de Contas:", periodoFiltro])
-      dados.push([]) // Linha vazia
-
-      // Adicionar quadros para cada bolsista
+      // Para cada bolsista, criar um quadro
       bolsistasFiltrados.forEach((row, index) => {
         const key = `${row.id}_${periodoFiltro}`
         const pagamento = pagamentos.find((p) => p.key === key) || {}
 
         const valorBolsa = parseMoney(pagamento.valor_bolsa) || row.valor || 0
-        const encargos = parseMoney(pagamento.encargos) || 0
-        const beneficios = parseMoney(pagamento.beneficios) || 0
-        const provisionamento = parseMoney(pagamento.provisionamento) || 0
-        const total = valorBolsa + encargos + beneficios + provisionamento
 
-        // Linha 1: Natureza de Dispêndio e Pessoal
-        dados.push(["Natureza de Dispêndio", "", "", "Pessoal", "", "", "", "", "", "", "", ""])
+        // Linha 1: Título "Natureza de Dispêndio" com merge e "Pessoal"
+        ws_data.push(["Natureza de Dispêndio", "", "", "", "", "", "", "", "", "", "", "Pessoal"])
 
-        // Linha 2: Favorecido, CPF, Nº extrato
-        dados.push(["Favorecido", "", "", "", "", "", "CPF", "", "", "Nº extrato", "", ""])
+        // Linha 2: Cabeçalhos da tabela
+        ws_data.push(["Favorecido", "", "", "", "", "CPF", "", "", "", "Nº extrato", "", ""])
 
-        // Linha 3: Valores principais
-        dados.push([
+        // Linha 3: Dados do bolsista
+        ws_data.push([
           row.nome || "",
-          "",
           "",
           "",
           "",
@@ -1666,18 +1658,31 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           formatCPF(row.cpf),
           "",
           "",
+          "",
           pagamento.num_extrato || "",
           "",
           "",
         ])
 
-        // Linha 4: NF/ND, Data de emissão, Data de pagamento, Valor
-        dados.push(["NF/ND", "", "", "Data de emissão da NF/ND", "", "", "", "Data do pagamento", "", "", "Valor", ""])
-
-        // Linha 5: Valores inferiores
-        dados.push([
-          pagamento.nf_nd || "",
+        // Linha 4: Cabeçalhos inferiores
+        ws_data.push([
+          "NF/ND",
           "",
+          "Data de emissão da NF/ND",
+          "",
+          "",
+          "",
+          "Data do pagamento",
+          "",
+          "",
+          "",
+          "Valor",
+          "",
+        ])
+
+        // Linha 5: Dados inferiores
+        ws_data.push([
+          pagamento.nf_nd || "",
           "",
           pagamento.data_emissao ? formatDateBR(pagamento.data_emissao) : "",
           "",
@@ -1686,18 +1691,58 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           pagamento.data_pagamento ? formatDateBR(pagamento.data_pagamento) : "",
           "",
           "",
-          formatBRL(total),
+          "",
+          formatBRL(valorBolsa),
           "",
         ])
 
         // Linha vazia entre quadros
         if (index < bolsistasFiltrados.length - 1) {
-          dados.push([])
+          ws_data.push([])
         }
       })
 
       // Criar worksheet
-      const ws = window.XLSX.utils.aoa_to_sheet(dados)
+      const ws = window.XLSX.utils.aoa_to_sheet(ws_data)
+
+      // Definir larguras das colunas
+      ws["!cols"] = [
+        { wch: 30 }, // Coluna A
+        { wch: 10 }, // Coluna B
+        { wch: 15 }, // Coluna C
+        { wch: 10 }, // Coluna D
+        { wch: 10 }, // Coluna E
+        { wch: 20 }, // Coluna F
+        { wch: 10 }, // Coluna G
+        { wch: 10 }, // Coluna H
+        { wch: 10 }, // Coluna I
+        { wch: 15 }, // Coluna J
+        { wch: 15 }, // Coluna K
+        { wch: 10 }, // Coluna L
+      ]
+
+      // Adicionar bordas e formatação
+      const range = window.XLSX.utils.decode_range(ws["!ref"])
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cell_address = { c: C, r: R }
+          const cell_ref = window.XLSX.utils.encode_cell(cell_address)
+
+          if (!ws[cell_ref]) continue
+
+          // Adicionar bordas a todas as células da tabela (após linha 6)
+          if (R >= 6) {
+            ws[cell_ref].s = {
+              border: {
+                top: { style: "thin", color: { rgb: "000000" } },
+                bottom: { style: "thin", color: { rgb: "000000" } },
+                left: { style: "thin", color: { rgb: "000000" } },
+                right: { style: "thin", color: { rgb: "000000" } },
+              },
+            }
+          }
+        }
+      }
 
       // Adicionar worksheet ao workbook
       window.XLSX.utils.book_append_sheet(wb, ws, "Folha de Rosto")
