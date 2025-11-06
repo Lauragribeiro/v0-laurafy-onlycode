@@ -1361,7 +1361,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           const total = valorBolsa + encargos + beneficios + provisionamento
 
           return `
-            <tr data-key="${escapeHtml(key)}" class="table-row">
+            <tr data-key="${escapeHtml(key)}" class="table-row" style="cursor: pointer;">
               <td>${escapeHtml(formatCPF(row.cpf))}</td>
               <td>${escapeHtml(row.nome || "")}</td>
               <td>Bolsista</td>
@@ -1384,17 +1384,32 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         .join("")
 
       tbody.innerHTML = rowsHtml
+
+      wirePagamentosTableClicks()
     }
 
     const wirePagamentosTableClicks = () => {
       const tbody = document.getElementById("lista-pagamentos")
+      console.log("[v0] wirePagamentosTableClicks - tbody found:", !!tbody)
 
-      tbody?.addEventListener("click", (ev) => {
+      if (!tbody) {
+        console.error("[v0] tbody lista-pagamentos not found!")
+        return
+      }
+
+      const newTbody = tbody.cloneNode(true)
+      tbody.parentNode.replaceChild(newTbody, tbody)
+
+      newTbody.addEventListener("click", (ev) => {
+        console.log("[v0] Click detected on tbody")
         const rowEl = ev.target.closest("tr[data-key]")
+        console.log("[v0] Row element found:", !!rowEl)
         if (!rowEl) return
         const { key } = rowEl.dataset
+        console.log("[v0] Opening modal for key:", key)
         openPagamentoModal(key)
       })
+      console.log("[v0] Event listener registered successfully")
     }
 
     const openPagamentoModal = (key) => {
