@@ -1180,9 +1180,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos")
       const btnExportarPagamentos = document.getElementById("btn-exportar-pagamentos")
+      const btnFolhaDeRosto = document.getElementById("btn-folha-de-rosto")
 
       filtroPeriodoPagamentos?.addEventListener("change", renderPagamentosTable)
       btnExportarPagamentos?.addEventListener("click", exportarPagamentosParaExcel)
+      btnFolhaDeRosto?.addEventListener("click", gerarFolhaDeRosto)
     }
 
     const wireForm = () => {
@@ -1389,6 +1391,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const wirePagamentosTableClicks = () => {
+      console.log("[v0] wirePagamentosTableClicks called")
       const tbody = document.getElementById("lista-pagamentos")
 
       if (!tbody) {
@@ -1398,16 +1401,24 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const newTbody = tbody.cloneNode(true)
       tbody.parentNode.replaceChild(newTbody, tbody)
+      console.log("[v0] Replaced tbody to remove old listeners")
 
       newTbody.addEventListener("click", (ev) => {
+        console.log("[v0] Click detected on tbody", ev.target)
         const rowEl = ev.target.closest("tr[data-key]")
-        if (!rowEl) return
+        if (!rowEl) {
+          console.log("[v0] No row with data-key found")
+          return
+        }
         const { key } = rowEl.dataset
+        console.log("[v0] Opening modal for key:", key)
         openPagamentoModal(key)
       })
+      console.log("[v0] Event listener added to tbody")
     }
 
     const openPagamentoModal = (key) => {
+      console.log("[v0] openPagamentoModal called with key:", key)
       const modal = document.getElementById("pagamento-modal")
       if (!modal) {
         console.error("[v0] Pagamento modal not found!")
@@ -1415,6 +1426,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       }
 
       const [bolsistaId, periodo] = key.split("_")
+      console.log("[v0] Bolsista ID:", bolsistaId, "Periodo:", periodo)
 
       const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
       if (!bolsista) {
@@ -1422,7 +1434,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         return
       }
 
+      console.log("[v0] Bolsista found:", bolsista)
+
       const pagamento = pagamentos.find((p) => p.key === key) || {}
+      console.log("[v0] Pagamento data:", pagamento)
 
       editingPagamentoKey = key
 
@@ -1452,6 +1467,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       calcularTotalPagamento()
 
+      console.log("[v0] Opening modal")
       if (typeof modal.showModal === "function") modal.showModal()
       else modal.setAttribute("open", "")
     }
@@ -1582,6 +1598,117 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           }, 3000)
         }
       })
+    }
+
+    const gerarFolhaDeRosto = () => {
+      if (!window.XLSX) {
+        alert("Biblioteca XLSX não carregada. Por favor, recarregue a página.")
+        return
+      }
+
+      const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos")
+      const periodoFiltro = filtroPeriodoPagamentos?.value || ""
+
+      if (!periodoFiltro) {
+        alert("Selecione um período para gerar a Folha de Rosto.")
+        return
+      }
+
+      const bolsistasFiltrados = bolsistas.filter((row) => {
+        const periodos = row.periodos_vinculados || []
+        return periodos.includes(periodoFiltro)
+      })
+
+      if (bolsistasFiltrados.length === 0) {
+        alert("Nenhum bolsista vinculado a este período.")
+        return
+      }
+
+      // Criar workbook
+      const wb = window.XLSX.utils.book_new()
+
+      // Criar dados para a planilha
+      const dados = []
+
+      // Adicionar cabeçalho do painel
+      dados.push(["Instituição Executora:", projectNome?.textContent || ""])
+      dados.push(["CNPJ:", ""]) // Adicionar campo CNPJ se disponível
+      dados.push(["Termo de Parceria n°:", ""]) // Adicionar campo Termo de Parceria se disponível
+      dados.push(["Projeto:", projectNome?.textContent || ""])
+      dados.push(["Prestação de Contas:", periodoFiltro])
+      dados.push([]) // Linha vazia
+
+      // Adicionar quadros para cada bolsista
+      bolsistasFiltrados.forEach((row, index) => {
+        const key = `${row.id}_${periodoFiltro}`
+        const pagamento = pagamentos.find((p) => p.key === key) || {}
+
+        const valorBolsa = parseMoney(pagamento.valor_bolsa) || row.valor || 0
+        const encargos = parseMoney(pagamento.encargos) || 0
+        const beneficios = parseMoney(pagamento.beneficios) || 0
+        const provisionamento = parseMoney(pagamento.provisionamento) || 0
+        const total = valorBolsa + encargos + beneficios + provisionamento
+
+        // Linha 1: Natureza de Dispêndio e Pessoal
+        dados.push(["Natureza de Dispêndio", "", "", "Pessoal", "", "", "", "", "", "", "", ""])
+
+        // Linha 2: Favorecido, CPF, Nº extrato
+        dados.push(["Favorecido", "", "", "", "", "", "CPF", "", "", "Nº extrato", "", ""])
+
+        // Linha 3: Valores principais
+        dados.push([
+          row.nome || "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          formatCPF(row.cpf),
+          "",
+          "",
+          pagamento.num_extrato || "",
+          "",
+          "",
+        ])
+
+        // Linha 4: NF/ND, Data de emissão, Data de pagamento, Valor
+        dados.push(["NF/ND", "", "", "Data de emissão da NF/ND", "", "", "", "Data do pagamento", "", "", "Valor", ""])
+
+        // Linha 5: Valores inferiores
+        dados.push([
+          pagamento.nf_nd || "",
+          "",
+          "",
+          pagamento.data_emissao ? formatDateBR(pagamento.data_emissao) : "",
+          "",
+          "",
+          "",
+          pagamento.data_pagamento ? formatDateBR(pagamento.data_pagamento) : "",
+          "",
+          "",
+          formatBRL(total),
+          "",
+        ])
+
+        // Linha vazia entre quadros
+        if (index < bolsistasFiltrados.length - 1) {
+          dados.push([])
+        }
+      })
+
+      // Criar worksheet
+      const ws = window.XLSX.utils.aoa_to_sheet(dados)
+
+      // Adicionar worksheet ao workbook
+      window.XLSX.utils.book_append_sheet(wb, ws, "Folha de Rosto")
+
+      // Gerar nome do arquivo
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 16).replace("T", "_").replace(/:/g, "-")
+      const filename = `folha_de_rosto_${periodoFiltro.replace("/", "-")}_${timestamp}.xlsx`
+
+      // Baixar arquivo
+      window.XLSX.writeFile(wb, filename)
     }
 
     const init = () => {
