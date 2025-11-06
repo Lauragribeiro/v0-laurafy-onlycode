@@ -694,7 +694,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       try {
         const raw = localStorage.getItem(pagamentosStorageKey())
         if (raw) {
-          const parsed = JSON.parse(raw)
+          const parsed = JSON.JSON.parse(raw)
           if (Array.isArray(parsed)) {
             pagamentos = parsed
           }
@@ -1388,6 +1388,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
     const wirePagamentosTableClicks = () => {
       const tbody = document.getElementById("lista-pagamentos")
+
       tbody?.addEventListener("click", (ev) => {
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) return
@@ -1397,14 +1398,24 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const openPagamentoModal = (key) => {
+      console.log("[v0] openPagamentoModal called with key:", key)
       const modal = document.getElementById("pagamento-modal")
-      if (!modal) return
+      if (!modal) {
+        console.error("[v0] Pagamento modal not found!")
+        return
+      }
 
       const [bolsistaId, periodo] = key.split("_")
+      console.log("[v0] Bolsista ID:", bolsistaId, "Periodo:", periodo)
+
       const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
-      if (!bolsista) return
+      if (!bolsista) {
+        console.error("[v0] Bolsista not found for ID:", bolsistaId)
+        return
+      }
 
       const pagamento = pagamentos.find((p) => p.key === key) || {}
+      console.log("[v0] Pagamento data:", pagamento)
 
       editingPagamentoKey = key
 
@@ -1434,6 +1445,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       calcularTotalPagamento()
 
+      console.log("[v0] Opening modal...")
       if (typeof modal.showModal === "function") modal.showModal()
       else modal.setAttribute("open", "")
     }
