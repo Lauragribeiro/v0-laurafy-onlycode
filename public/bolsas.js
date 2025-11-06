@@ -1414,7 +1414,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         console.log("[v0] Opening modal for key:", key)
         openPagamentoModal(key)
       })
-      console.log("[v0] Event listener added to tbody")
+      console.log("[v0] Event listener added to new tbody")
     }
 
     const openPagamentoModal = (key) => {
@@ -1627,12 +1627,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const wb = window.XLSX.utils.book_new()
       const ws_data = []
 
-      // Cabeçalho do projeto
-      ws_data.push(["Instituição Executora:", projectNome?.textContent || "VERTEX INSTITUTO DE TECNOLOGIA E INOVAÇÃO"])
-      ws_data.push(["CNPJ:", "91.703.922/0001-28"])
-      ws_data.push(["Termo de Parceria nº:", "TPA no 268/SOFTEX/VERTEX/TIC64"])
-      ws_data.push(["Projeto:", projectNome?.textContent || "Residência em TIC 64 Programa OxeTech Academy."])
-      ws_data.push(["Prestação de Contas:", periodoFiltro])
+      ws_data.push(["Instituição Executora:", ""])
+      ws_data.push(["CNPJ:", ""])
+      ws_data.push(["Termo de Parceria nº:", ""])
+      ws_data.push(["Projeto:", ""])
+      ws_data.push(["Prestação de Contas:", ""])
       ws_data.push([]) // Linha vazia
 
       // Para cada bolsista, criar um quadro
@@ -1642,10 +1641,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
         const valorBolsa = parseMoney(pagamento.valor_bolsa) || row.valor || 0
 
-        // Linha 1: Título "Natureza de Dispêndio" com merge e "Pessoal"
-        ws_data.push(["Natureza de Dispêndio", "", "", "", "", "", "", "", "", "", "", "Pessoal"])
+        ws_data.push([
+          "Natureza de Dispêndio",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "Recursos humanos diretos e indiretos",
+          "",
+        ])
 
-        // Linha 2: Cabeçalhos da tabela
         ws_data.push(["Favorecido", "", "", "", "", "CPF", "", "", "", "Nº extrato", "", ""])
 
         // Linha 3: Dados do bolsista
@@ -1664,7 +1674,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           "",
         ])
 
-        // Linha 4: Cabeçalhos inferiores
         ws_data.push([
           "NF/ND",
           "",
@@ -1676,7 +1685,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           "",
           "",
           "",
-          "Valor",
+          "Rendimentos",
           "",
         ])
 
@@ -1705,32 +1714,74 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       // Criar worksheet
       const ws = window.XLSX.utils.aoa_to_sheet(ws_data)
 
+      ws["!gridlines"] = false
+
       // Definir larguras das colunas
       ws["!cols"] = [
-        { wch: 30 }, // Coluna A
-        { wch: 10 }, // Coluna B
+        { wch: 20 }, // Coluna A
+        { wch: 5 }, // Coluna B
         { wch: 15 }, // Coluna C
-        { wch: 10 }, // Coluna D
-        { wch: 10 }, // Coluna E
-        { wch: 20 }, // Coluna F
-        { wch: 10 }, // Coluna G
-        { wch: 10 }, // Coluna H
-        { wch: 10 }, // Coluna I
-        { wch: 15 }, // Coluna J
+        { wch: 5 }, // Coluna D
+        { wch: 5 }, // Coluna E
+        { wch: 15 }, // Coluna F
+        { wch: 5 }, // Coluna G
+        { wch: 5 }, // Coluna H
+        { wch: 5 }, // Coluna I
+        { wch: 12 }, // Coluna J
         { wch: 15 }, // Coluna K
-        { wch: 10 }, // Coluna L
+        { wch: 5 }, // Coluna L
       ]
 
-      // Adicionar bordas e formatação
+      const merges = []
+
+      // Para cada bolsista, mesclar células
+      let currentRow = 6 // Começa após o cabeçalho (linhas 0-5)
+      bolsistasFiltrados.forEach((row, index) => {
+        // Linha 1: Mesclar "Natureza de Dispêndio" (A-J) e "Recursos humanos diretos e indiretos" (K-L)
+        merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 9 } }) // A-J
+        merges.push({ s: { r: currentRow, c: 10 }, e: { r: currentRow, c: 11 } }) // K-L
+
+        // Linha 2: Mesclar "Favorecido" (A-E), "CPF" (F-I), "Nº extrato" (J-L)
+        merges.push({ s: { r: currentRow + 1, c: 0 }, e: { r: currentRow + 1, c: 4 } }) // A-E
+        merges.push({ s: { r: currentRow + 1, c: 5 }, e: { r: currentRow + 1, c: 8 } }) // F-I
+        merges.push({ s: { r: currentRow + 1, c: 9 }, e: { r: currentRow + 1, c: 11 } }) // J-L
+
+        // Linha 3: Mesclar dados do bolsista
+        merges.push({ s: { r: currentRow + 2, c: 0 }, e: { r: currentRow + 2, c: 4 } }) // Nome (A-E)
+        merges.push({ s: { r: currentRow + 2, c: 5 }, e: { r: currentRow + 2, c: 8 } }) // CPF (F-I)
+        merges.push({ s: { r: currentRow + 2, c: 9 }, e: { r: currentRow + 2, c: 11 } }) // Nº extrato (J-L)
+
+        // Linha 4: Mesclar "NF/ND" (A-B), "Data de emissão" (C-F), "Data do pagamento" (G-J), "Rendimentos" (K-L)
+        merges.push({ s: { r: currentRow + 3, c: 0 }, e: { r: currentRow + 3, c: 1 } }) // A-B
+        merges.push({ s: { r: currentRow + 3, c: 2 }, e: { r: currentRow + 3, c: 5 } }) // C-F
+        merges.push({ s: { r: currentRow + 3, c: 6 }, e: { r: currentRow + 3, c: 9 } }) // G-J
+        merges.push({ s: { r: currentRow + 3, c: 10 }, e: { r: currentRow + 3, c: 11 } }) // K-L
+
+        // Linha 5: Mesclar dados inferiores
+        merges.push({ s: { r: currentRow + 4, c: 0 }, e: { r: currentRow + 4, c: 1 } }) // NF/ND (A-B)
+        merges.push({ s: { r: currentRow + 4, c: 2 }, e: { r: currentRow + 4, c: 5 } }) // Data emissão (C-F)
+        merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 9 } }) // Data pagamento (G-J)
+        merges.push({ s: { r: currentRow + 4, c: 10 }, e: { r: currentRow + 4, c: 11 } }) // Valor (K-L)
+
+        currentRow += 6 // Próximo quadro (5 linhas + 1 linha vazia)
+        if (index < bolsistasFiltrados.length - 1) {
+          currentRow += 1 // Linha vazia entre quadros
+        }
+      })
+
+      ws["!merges"] = merges
+
       const range = window.XLSX.utils.decode_range(ws["!ref"])
       for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const cell_address = { c: C, r: R }
           const cell_ref = window.XLSX.utils.encode_cell(cell_address)
 
-          if (!ws[cell_ref]) continue
+          if (!ws[cell_ref]) {
+            ws[cell_ref] = { t: "s", v: "" }
+          }
 
-          // Adicionar bordas a todas as células da tabela (após linha 6)
+          // Adicionar bordas a todas as células da tabela (após linha 5)
           if (R >= 6) {
             ws[cell_ref].s = {
               border: {
@@ -1739,6 +1790,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
                 left: { style: "thin", color: { rgb: "000000" } },
                 right: { style: "thin", color: { rgb: "000000" } },
               },
+              alignment: {
+                vertical: "center",
+                horizontal: "center",
+              },
+            }
+
+            // Adicionar cor de fundo cinza nos cabeçalhos
+            const rowInQuadro = (R - 6) % 6
+            if (rowInQuadro === 1 || rowInQuadro === 3) {
+              // Linhas de cabeçalho (Favorecido, CPF, etc. e NF/ND, Data de emissão, etc.)
+              ws[cell_ref].s.fill = {
+                fgColor: { rgb: "D3D3D3" },
+              }
             }
           }
         }
