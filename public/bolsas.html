@@ -91,7 +91,159 @@
         </table>
       </div>
     </section>
+
+    <!-- Adicionando nova seção de Pagamentos de Bolsistas -->
+    <section class="card block">
+      <div class="block-head">
+        <h2 class="block-title">Pagamentos de Bolsistas</h2>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="tiny muted">Selecione o período:</span>
+            <select id="filtro-periodo-pagamentos" class="form-select" style="min-width: 150px;">
+              <option value="">Selecione mês/ano</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-outline" id="btn-exportar-pagamentos" title="Baixar Excel Pagamentos">
+            ⬇️📊 Baixar Excel
+          </button>
+          <span class="tiny muted">Clique em uma linha para editar os dados de pagamento.</span>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table table--clickable" id="tbl-pagamentos">
+          <thead>
+            <tr>
+              <th>CPF</th>
+              <th>Favorecido</th>
+              <th>Tipo</th>
+              <th>Aloc. Projeto (%)</th>
+              <th>Horas Totais</th>
+              <th>Horas Projeto</th>
+              <th>%Horas</th>
+              <th>Valor da Bolsa</th>
+              <th>Encargos</th>
+              <th>Benefícios</th>
+              <th>Provisionam.</th>
+              <th>Total</th>
+              <th>N° do extrato</th>
+              <th>NF/ND</th>
+              <th>Data emissão NF/ND</th>
+              <th>Data pagamento</th>
+            </tr>
+          </thead>
+          <tbody id="lista-pagamentos">
+            <tr class="table-empty">
+              <td colspan="16">Selecione um período para visualizar os pagamentos.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
+
+  <!-- Adicionando modal para editar pagamento -->
+  <dialog id="pagamento-modal" class="modal">
+    <div class="modal__content">
+      <div class="modal__header">
+        <h2 id="pagamento-modal-title">Editar Pagamento</h2>
+        <button type="button" class="icon-btn" id="pagamento-modal-close" aria-label="Fechar">✕</button>
+      </div>
+
+      <form id="pagamento-form" class="form-grid" novalidate>
+        <input type="hidden" id="pagamento-bolsista-id" />
+        <input type="hidden" id="pagamento-periodo" />
+
+        <label class="field">
+          <span>CPF</span>
+          <input id="pagamento-cpf" type="text" readonly disabled />
+        </label>
+
+        <label class="field">
+          <span>Favorecido</span>
+          <input id="pagamento-favorecido" type="text" readonly disabled />
+        </label>
+
+        <label class="field">
+          <span>Tipo</span>
+          <input id="pagamento-tipo" type="text" value="Bolsista" readonly disabled />
+        </label>
+
+        <label class="field">
+          <span>Alocação Projeto (%)</span>
+          <input id="pagamento-aloc-projeto" type="number" min="0" max="100" step="0.01" placeholder="0.00" />
+        </label>
+
+        <label class="field">
+          <span>Horas Totais</span>
+          <input id="pagamento-horas-totais" type="number" min="0" step="0.01" placeholder="0.00" />
+        </label>
+
+        <label class="field">
+          <span>Horas Projeto</span>
+          <input id="pagamento-horas-projeto" type="number" min="0" step="0.01" placeholder="0.00" />
+        </label>
+
+        <label class="field">
+          <span>% Horas</span>
+          <input id="pagamento-perc-horas" type="number" min="0" max="100" step="0.01" placeholder="0.00" />
+        </label>
+
+        <label class="field">
+          <span>Valor da Bolsa</span>
+          <input id="pagamento-valor-bolsa" type="text" readonly disabled />
+        </label>
+
+        <label class="field">
+          <span>Encargos</span>
+          <input id="pagamento-encargos" type="text" inputmode="decimal" placeholder="R$ 0,00" />
+        </label>
+
+        <label class="field">
+          <span>Benefícios</span>
+          <input id="pagamento-beneficios" type="text" inputmode="decimal" placeholder="R$ 0,00" />
+        </label>
+
+        <label class="field">
+          <span>Provisionamento</span>
+          <input id="pagamento-provisionamento" type="text" inputmode="decimal" placeholder="R$ 0,00" />
+        </label>
+
+        <label class="field">
+          <span>Total</span>
+          <input id="pagamento-total" type="text" readonly disabled />
+          <small class="tiny muted">Calculado automaticamente</small>
+        </label>
+
+        <label class="field">
+          <span>N° do extrato</span>
+          <input id="pagamento-num-extrato" type="text" placeholder="Ex: 12345" />
+        </label>
+
+        <label class="field">
+          <span>NF/ND</span>
+          <input id="pagamento-nf-nd" type="text" placeholder="Ex: NF-001" />
+        </label>
+
+        <label class="field">
+          <span>Data de emissão da NF/ND</span>
+          <input id="pagamento-data-emissao" type="date" />
+        </label>
+
+        <label class="field">
+          <span>Data de pagamento</span>
+          <input id="pagamento-data-pagamento" type="date" />
+        </label>
+
+        <p id="pagamento-form-feedback" class="form-feedback tiny span-2" role="alert" aria-live="assertive"></p>
+
+        <div class="modal__footer span-2">
+          <button type="button" class="btn btn-outline" id="pagamento-btn-cancelar">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="pagamento-btn-salvar">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
 
   <dialog id="bolsista-modal" class="modal">
     <div class="modal__content">

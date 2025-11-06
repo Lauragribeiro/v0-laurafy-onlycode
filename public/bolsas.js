@@ -17,56 +17,23 @@ export const resolveStoredBolsistas = ({ previous = [], stored = null, projectId
 
   return { list: Array.isArray(stored) ? [...stored] : [], shouldPersist: false }
 }
-const normalizeTermoFields = (source = {}, parsedAt = null) => {
-  if (!source) return null
 
-  const inicio =
-    source.inicio_vigencia ?? source.vigenciaInicio ?? (source.parsed?.inicio_vigencia ?? source.parsed?.vigenciaInicio) ?? null
-  const fim =
-    source.fim_vigencia ??
-    source.vigenciaFim ??
-    source.vigenciaISO ??
-    (source.parsed?.fim_vigencia ?? source.parsed?.vigenciaFim ?? source.parsed?.vigenciaISO) ??
-    null
-  const fonteTexto =
-    source.fonte_texto ?? source.vigenciaRaw ?? source.parsed?.fonte_texto ?? source.parsed?.vigenciaRaw ?? ""
-
-  return {
-    fileName: source.fileName || source.parsed?.fileName || "termo.pdf",
-    size: source.size ?? source.parsed?.size ?? null,
-    inicio_vigencia: inicio,
-    fim_vigencia: fim,
-    vigenciaInicio: inicio,
-    vigenciaFim: fim,
-    vigenciaISO: fim,
-    vigenciaRaw: fonteTexto,
-    fonte_texto: fonteTexto,
-    valorMaximo:
-      source.valorMaximo ?? source.parsed?.valorMaximo ?? null,
-    valorMaximoRaw:
-      source.valorMaximoRaw ?? source.parsed?.valorMaximoRaw ?? "",
-    parsedAt: parsedAt ?? source.parsedAt ?? source.parsed?.parsedAt ?? null,
-    rawText: source.rawText ?? source.parsed?.rawText ?? "",
-  }
-}
 export const buildTermoData = (upload, fallback = null, now = defaultNow) => {
   if (upload) {
-     const stamp = typeof now === "function" ? now() : defaultNow()
-    const parsedAt = stamp instanceof Date ? stamp.toISOString() : new Date(stamp).toISOString()
-    const normalized = normalizeTermoFields(
-      {
-        fileName: upload.fileName,
-        size: upload.size,
-        rawText: upload.rawText,
-        parsed: upload.parsed || {},
-      },
-      parsedAt,
-    )
-    return normalized
+    const stamp = now()
+    const iso = stamp.toISOString()
+    return {
+      fileName: upload.fileName,
+      vigenciaRaw: upload.parsed?.vigenciaRaw || "",
+      vigenciaISO: upload.parsed?.vigenciaISO || null,
+      valorMaximoRaw: upload.parsed?.valorMaximoRaw || "",
+      valorMaximo: upload.parsed?.valorMaximo ?? null,
+      parsedAt: iso,
+    }
   }
 
   if (fallback) {
-    return normalizeTermoFields({ ...fallback }, fallback.parsedAt ?? null)
+    return { ...fallback }
   }
 
   return null
@@ -82,35 +49,52 @@ export const buildBolsistaRecord = ({
   fallbackTermo = null,
   existingRecord = null,
   periodosVinculados = [],
-   now = defaultNow,
-  idFactory = defaultIdFactory,
 } = {}) => {
-   const stamp = typeof now === "function" ? now() : defaultNow()
-  const atualizadoEm = stamp instanceof Date ? stamp.toISOString() : new Date(stamp).toISOString()
-  const id = editingId ?? (typeof idFactory === "function" ? idFactory() : defaultIdFactory())
+  const now = new Date().toISOString()
+  const id = editingId ?? Date.now()
 
-  const termo = buildTermoData(termoUpload, fallbackTermo, () => stamp)
+  let termo = null
+  if (termoUpload) {
+    termo = {
+      fileName: termoUpload.fileName || "termo.pdf",
+      inicio_vigencia: termoUpload.parsed?.inicio_vigencia || null,
+      fim_vigencia: termoUpload.parsed?.fim_vigencia || null,
+      vigenciaInicio: termoUpload.parsed?.inicio_vigencia || null,
+      vigenciaFim: termoUpload.parsed?.fim_vigencia || null,
+      vigenciaISO: termoUpload.parsed?.fim_vigencia || termoUpload.parsed?.vigenciaISO || null,
+      vigenciaRaw: termoUpload.parsed?.fonte_texto || termoUpload.parsed?.vigenciaRaw || "",
+      fonte_texto: termoUpload.parsed?.fonte_texto || "",
+      valorMaximo: termoUpload.parsed?.valorMaximo || null,
+      valorMaximoRaw: termoUpload.parsed?.valorMaximoRaw || "",
+    }
+  } else if (fallbackTermo) {
+    termo = {
+      fileName: fallbackTermo.fileName || "termo.pdf",
+      inicio_vigencia: fallbackTermo.inicio_vigencia || fallbackTermo.vigenciaInicio || null,
+      fim_vigencia: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || fallbackTermo.vigenciaISO || null,
+      vigenciaInicio: fallbackTermo.inicio_vigencia || fallbackTermo.vigenciaInicio || null,
+      vigenciaFim: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || null,
+      vigenciaISO: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || fallbackTermo.vigenciaISO || null,
+      vigenciaRaw: fallbackTermo.fonte_texto || fallbackTermo.vigenciaRaw || "",
+      fonte_texto: fallbackTermo.fonte_texto || fallbackTermo.vigenciaRaw || "",
+      valorMaximo: fallbackTermo.valorMaximo || null,
+      valorMaximoRaw: fallbackTermo.valorMaximoRaw || "",
+    }
+  }
 
   const historicoAlteracoes = Array.isArray(existingRecord?.historicoAlteracoes)
     ? [...existingRecord.historicoAlteracoes]
     : []
 
   if (editingId && existingRecord) {
-    if (existingRecord.funcao !== funcao) {
-      historicoAlteracoes.push({
-        campo: "funcao",
-        anterior: existingRecord.funcao ?? "",
-        atual: funcao,
-        modificadoEm: atualizadoEm,
-      })
-    }
+    const changes = []
+    if (existingRecord.funcao !== funcao) changes.push(`Função: ${existingRecord.funcao} → ${funcao}`)
+    if (existingRecord.valor !== valorNum) changes.push(`Valor: R$ ${existingRecord.valor} → R$ ${valorNum}`)
 
-       if (existingRecord.valor !== valorNum) {
+    if (changes.length > 0) {
       historicoAlteracoes.push({
-               campo: "valor",
-        anterior: existingRecord.valor ?? null,
-        atual: valorNum,
-        modificadoEm: atualizadoEm,
+        data: now,
+        alteracoes: changes,
       })
     }
   }
@@ -124,7 +108,7 @@ export const buildBolsistaRecord = ({
     termo,
     historicoAlteracoes,
     periodos_vinculados: Array.isArray(periodosVinculados) ? [...periodosVinculados] : [],
-        atualizadoEm,
+    updatedAt: now,
   }
 }
 
@@ -652,21 +636,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     let termoUpload = null
     const currentPeriodosVinculados = []
 
+    let pagamentos = []
+    let editingPagamentoKey = null
+
     const storageKey = () => `bolsas_${projectId || "default"}`
 
-    const setFormFeedback = (message, type = "info") => {
-      if (!formFeedback) return
-      formFeedback.textContent = message || ""
-      formFeedback.classList.toggle("form-feedback--error", type === "error")
-      formFeedback.classList.toggle("form-feedback--success", type === "success")
-    }
-
-    const setTermoFeedback = (message, type = "info") => {
-      if (!termoFeedback) return
-      termoFeedback.textContent = message || ""
-      termoFeedback.classList.toggle("form-feedback--error", type === "error")
-      termoFeedback.classList.toggle("form-feedback--success", type === "success")
-    }
+    const pagamentosStorageKey = () => `pagamentos_${projectId || "default"}`
 
     const saveLocal = () => {
       if (!projectId) return
@@ -674,6 +649,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         localStorage.setItem(storageKey(), JSON.stringify(bolsistas))
       } catch (err) {
         console.warn("Não foi possível salvar os bolsistas localmente.", err)
+      }
+    }
+
+    const savePagamentosLocal = () => {
+      if (!projectId) return
+      try {
+        localStorage.setItem(pagamentosStorageKey(), JSON.stringify(pagamentos))
+      } catch (err) {
+        console.warn("Não foi possível salvar os pagamentos localmente.", err)
       }
     }
 
@@ -705,74 +689,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       }
     }
 
-    const renderTable = () => {
-      if (!tableBody) return
-
-      const periodoFiltro = filtroPeriodo?.value || ""
-      let bolsistasFiltrados = bolsistas
-
-      if (periodoFiltro) {
-        bolsistasFiltrados = bolsistas.filter((row) => {
-          const periodos = row.periodos_vinculados || []
-          return periodos.includes(periodoFiltro)
-        })
-      }
-
-      if (!Array.isArray(bolsistasFiltrados) || bolsistasFiltrados.length === 0) {
-        tableBody.innerHTML =
-          '<tr class="table-empty"><td colspan="6">Nenhum bolsista cadastrado até o momento.</td></tr>'
-        return
-      }
-
-      const rowsHtml = bolsistasFiltrados
-        .map(
-          (row) => `
-        <tr data-id="${escapeHtml(String(row.id))}" class="table-row">
-          <td>${escapeHtml(row.nome || "")}</td>
-          <td>${escapeHtml(formatCPF(row.cpf))}</td>
-          <td>${escapeHtml(row.funcao || "")}</td>
-          <td>${escapeHtml(formatBRL(row.valor))}</td>
-          <td>${renderPeriodosVinculados(row)}</td>
-          <td>${renderIndicator(row)}</td>
-        </tr>
-      `,
-        )
-        .join("")
-
-      tableBody.innerHTML = rowsHtml
-    }
-
-    const renderPeriodosVinculados = (row) => {
-      const periodos = row.periodos_vinculados || []
-      if (periodos.length === 0) {
-        return '<span class="tiny muted">Nenhum período cadastrado</span>'
-      }
-      return periodos.map((p) => `<span class="chip">${escapeHtml(p)}</span>`).join(" ")
-    }
-
-    const updateFiltroPeriodo = () => {
-      if (!filtroPeriodo) return
-
-      const todosOsPeriodos = new Set()
-      bolsistas.forEach((row) => {
-        const periodos = row.periodos_vinculados || []
-        periodos.forEach((p) => todosOsPeriodos.add(p))
-      })
-
-      const periodosOrdenados = Array.from(todosOsPeriodos).sort((a, b) => {
-        const [mesA, anoA] = a.split("/").map(Number)
-        const [mesB, anoB] = b.split("/").map(Number)
-        if (anoA !== anoB) return anoA - anoB
-        return mesA - mesB
-      })
-
-      const currentValue = filtroPeriodo.value
-      filtroPeriodo.innerHTML =
-        '<option value="">Todos os períodos</option>' +
-        periodosOrdenados.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("")
-
-      if (currentValue && periodosOrdenados.includes(currentValue)) {
-        filtroPeriodo.value = currentValue
+    const loadPagamentosLocal = () => {
+      if (!projectId) return
+      try {
+        const raw = localStorage.getItem(pagamentosStorageKey())
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed)) {
+            pagamentos = parsed
+          }
+        }
+      } catch (err) {
+        console.warn("Não foi possível carregar os pagamentos armazenados.", err)
       }
     }
 
@@ -820,6 +748,70 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 16).replace("T", "_").replace(/:/g, "-")
       const filename = `recursos_humanos_${timestamp}.xlsx`
+
+      window.XLSX.writeFile(wb, filename)
+    }
+
+    const exportarPagamentosParaExcel = () => {
+      if (!window.XLSX) {
+        alert("Biblioteca XLSX não carregada. Por favor, recarregue a página.")
+        return
+      }
+
+      const periodoFiltro = document.getElementById("filtro-periodo-pagamentos")?.value || ""
+
+      if (!periodoFiltro) {
+        alert("Selecione um período para exportar.")
+        return
+      }
+
+      const bolsistasFiltrados = bolsistas.filter((row) => {
+        const periodos = row.periodos_vinculados || []
+        return periodos.includes(periodoFiltro)
+      })
+
+      if (bolsistasFiltrados.length === 0) {
+        alert("Nenhum pagamento para exportar neste período.")
+        return
+      }
+
+      const dados = bolsistasFiltrados.map((row) => {
+        const key = `${row.id}_${periodoFiltro}`
+        const pagamento = pagamentos.find((p) => p.key === key) || {}
+
+        const valorBolsa = parseMoney(pagamento.valor_bolsa) || row.valor || 0
+        const encargos = parseMoney(pagamento.encargos) || 0
+        const beneficios = parseMoney(pagamento.beneficios) || 0
+        const provisionamento = parseMoney(pagamento.provisionamento) || 0
+        const total = valorBolsa + encargos + beneficios + provisionamento
+
+        return {
+          CPF: formatCPF(row.cpf),
+          Favorecido: row.nome || "",
+          Tipo: "Bolsista",
+          "Aloc. Projeto (%)": pagamento.aloc_projeto || "",
+          "Horas Totais": pagamento.horas_totais || "",
+          "Horas Projeto": pagamento.horas_projeto || "",
+          "%Horas": pagamento.perc_horas || "",
+          "Valor da Bolsa": formatBRL(valorBolsa),
+          Encargos: formatBRL(encargos),
+          Benefícios: formatBRL(beneficios),
+          "Provisionam.": formatBRL(provisionamento),
+          Total: formatBRL(total),
+          "N° do extrato": pagamento.num_extrato || "",
+          "NF/ND": pagamento.nf_nd || "",
+          "Data emissão NF/ND": pagamento.data_emissao ? formatDateBR(pagamento.data_emissao) : "",
+          "Data pagamento": pagamento.data_pagamento ? formatDateBR(pagamento.data_pagamento) : "",
+        }
+      })
+
+      const ws = window.XLSX.utils.json_to_sheet(dados)
+      const wb = window.XLSX.utils.book_new()
+      window.XLSX.utils.book_append_sheet(wb, ws, "Pagamentos")
+
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 16).replace("T", "_").replace(/:/g, "-")
+      const filename = `pagamentos_${periodoFiltro.replace("/", "-")}_${timestamp}.xlsx`
 
       window.XLSX.writeFile(wb, filename)
     }
@@ -915,6 +907,91 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         if (!row) return
         openEditModal(row)
       })
+    }
+
+    const setFormFeedback = (message, type = "info") => {
+      if (!formFeedback) return
+      formFeedback.textContent = message || ""
+      formFeedback.classList.toggle("form-feedback--error", type === "error")
+      formFeedback.classList.toggle("form-feedback--success", type === "success")
+    }
+
+    const setTermoFeedback = (message, type = "info") => {
+      if (!termoFeedback) return
+      termoFeedback.textContent = message || ""
+      termoFeedback.classList.toggle("form-feedback--error", type === "error")
+      termoFeedback.classList.toggle("form-feedback--success", type === "success")
+    }
+
+    const renderPeriodosVinculados = (row) => {
+      const periodos = row.periodos_vinculados || []
+      if (periodos.length === 0) {
+        return '<span class="tiny muted">Nenhum período cadastrado</span>'
+      }
+      return periodos.map((p) => `<span class="chip">${escapeHtml(p)}</span>`).join(" ")
+    }
+
+    const renderTable = () => {
+      if (!tableBody) return
+
+      const periodoFiltro = filtroPeriodo?.value || ""
+      let bolsistasFiltrados = bolsistas
+
+      if (periodoFiltro) {
+        bolsistasFiltrados = bolsistas.filter((row) => {
+          const periodos = row.periodos_vinculados || []
+          return periodos.includes(periodoFiltro)
+        })
+      }
+
+      if (!Array.isArray(bolsistasFiltrados) || bolsistasFiltrados.length === 0) {
+        tableBody.innerHTML =
+          '<tr class="table-empty"><td colspan="6">Nenhum bolsista cadastrado até o momento.</td></tr>'
+        return
+      }
+
+      const rowsHtml = bolsistasFiltrados
+        .map(
+          (row) => `
+        <tr data-id="${escapeHtml(String(row.id))}" class="table-row">
+          <td>${escapeHtml(row.nome || "")}</td>
+          <td>${escapeHtml(formatCPF(row.cpf))}</td>
+          <td>${escapeHtml(row.funcao || "")}</td>
+          <td>${escapeHtml(formatBRL(row.valor))}</td>
+          <td>${renderPeriodosVinculados(row)}</td>
+          <td>${renderIndicator(row)}</td>
+        </tr>
+      `,
+        )
+        .join("")
+
+      tableBody.innerHTML = rowsHtml
+    }
+
+    const updateFiltroPeriodo = () => {
+      if (!filtroPeriodo) return
+
+      const todosOsPeriodos = new Set()
+      bolsistas.forEach((row) => {
+        const periodos = row.periodos_vinculados || []
+        periodos.forEach((p) => todosOsPeriodos.add(p))
+      })
+
+      const periodosOrdenados = Array.from(todosOsPeriodos).sort((a, b) => {
+        const [mesA, anoA] = a.split("/").map(Number)
+        const [mesB, anoB] = b.split("/").map(Number)
+        if (anoA !== anoB) return anoA - anoB
+        return mesA - mesB
+      })
+
+      const currentValue = filtroPeriodo.value
+      filtroPeriodo.innerHTML =
+        '<option value="">Todos os períodos</option>' +
+        periodosOrdenados.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("")
+
+      if (currentValue && periodosOrdenados.includes(currentValue)) {
+        filtroPeriodo.value = currentValue
+      }
     }
 
     const closeModal = () => {
@@ -1015,62 +1092,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       fillModalWithRow(row)
       openModal()
     }
- const handleFormSubmit = (event) => {
-      event.preventDefault()
-      if (!form) return
 
-      setFormFeedback("")
-
-      const nome = nomeInput?.value?.trim() || ""
-      if (!nome) {
-        setFormFeedback("Informe o nome completo do bolsista.", "error")
-        nomeInput?.focus()
-        return
-      }
-
-      const cpfDigits = onlyDigits(cpfInput?.value || "")
-      if (!validateCPF(cpfDigits)) {
-        setFormFeedback("CPF inválido. Verifique os 11 dígitos informados.", "error")
-        cpfInput?.focus()
-        return
-      }
-
-      const funcao = funcaoInput?.value?.trim() || ""
-      if (!funcao) {
-        setFormFeedback("Informe a função exercida no projeto.", "error")
-        funcaoInput?.focus()
-        return
-      }
-
-      const valorBruto = valorInput?.value ?? ""
-      const valorNum = parseMoney(valorBruto)
-      if (valorNum == null) {
-        setFormFeedback("Informe o valor da bolsa em reais.", "error")
-        valorInput?.focus()
-        return
-      }
-
-      const existingRecord =
-        editingId != null ? bolsistas.find((item) => String(item.id) === String(editingId)) || null : null
-
-      const record = buildBolsistaRecord({
-        editingId,
-        nome,
-        cpfDigits,
-        funcao,
-        valorNum,
-        termoUpload,
-        fallbackTermo: existingRecord?.termo || null,
-        existingRecord,
-        periodosVinculados: currentPeriodosVinculados,
-      })
-
-      bolsistas = upsertBolsistas(bolsistas, record, editingId)
-      saveLocal()
-      updateFiltroPeriodo()
-      renderTable()
-      closeModal()
-    }
     const normalizeValorInput = () => {
       if (!valorInput) return
       const num = parseMoney(valorInput.value)
@@ -1153,10 +1175,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       btnClose?.addEventListener("click", closeModal)
       btnCancelar?.addEventListener("click", closeModal)
 
-      form?.addEventListener("submit", handleFormSubmit)
-
       filtroPeriodo?.addEventListener("change", renderTable)
       btnExportarExcel?.addEventListener("click", exportarParaExcel)
+
+      const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos")
+      const btnExportarPagamentos = document.getElementById("btn-exportar-pagamentos")
+
+      filtroPeriodoPagamentos?.addEventListener("change", renderPagamentosTable)
+      btnExportarPagamentos?.addEventListener("click", exportarPagamentosParaExcel)
     }
 
     const wireForm = () => {
@@ -1258,15 +1284,286 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
         initTabs()
         loadLocal()
+        loadPagamentosLocal()
         renderTable()
         updateFiltroPeriodo()
+        updateFiltroPeriodoPagamentos()
       } catch (err) {
         console.error("Falha ao carregar dados do projeto.", err)
         initTabs()
         loadLocal()
+        loadPagamentosLocal()
         renderTable()
         updateFiltroPeriodo()
+        updateFiltroPeriodoPagamentos()
       }
+    }
+
+    const updateFiltroPeriodoPagamentos = () => {
+      const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos")
+      if (!filtroPeriodoPagamentos) return
+
+      const todosOsPeriodos = new Set()
+      bolsistas.forEach((row) => {
+        const periodos = row.periodos_vinculados || []
+        periodos.forEach((p) => todosOsPeriodos.add(p))
+      })
+
+      const periodosOrdenados = Array.from(todosOsPeriodos).sort((a, b) => {
+        const [mesA, anoA] = a.split("/").map(Number)
+        const [mesB, anoB] = b.split("/").map(Number)
+        if (anoA !== anoB) return anoA - anoB
+        return mesA - mesB
+      })
+
+      const currentValue = filtroPeriodoPagamentos.value
+      filtroPeriodoPagamentos.innerHTML =
+        '<option value="">Selecione mês/ano</option>' +
+        periodosOrdenados.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("")
+
+      if (currentValue && periodosOrdenados.includes(currentValue)) {
+        filtroPeriodoPagamentos.value = currentValue
+      }
+    }
+
+    const renderPagamentosTable = () => {
+      const tbody = document.getElementById("lista-pagamentos")
+      if (!tbody) return
+
+      const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos")
+      const periodoFiltro = filtroPeriodoPagamentos?.value || ""
+
+      if (!periodoFiltro) {
+        tbody.innerHTML =
+          '<tr class="table-empty"><td colspan="16">Selecione um período para visualizar os pagamentos.</td></tr>'
+        return
+      }
+
+      const bolsistasFiltrados = bolsistas.filter((row) => {
+        const periodos = row.periodos_vinculados || []
+        return periodos.includes(periodoFiltro)
+      })
+
+      if (bolsistasFiltrados.length === 0) {
+        tbody.innerHTML = '<tr class="table-empty"><td colspan="16">Nenhum bolsista vinculado a este período.</td></tr>'
+        return
+      }
+
+      const rowsHtml = bolsistasFiltrados
+        .map((row) => {
+          const key = `${row.id}_${periodoFiltro}`
+          const pagamento = pagamentos.find((p) => p.key === key) || {}
+
+          const valorBolsa = parseMoney(pagamento.valor_bolsa) || row.valor || 0
+          const encargos = parseMoney(pagamento.encargos) || 0
+          const beneficios = parseMoney(pagamento.beneficios) || 0
+          const provisionamento = parseMoney(pagamento.provisionamento) || 0
+          const total = valorBolsa + encargos + beneficios + provisionamento
+
+          return `
+            <tr data-key="${escapeHtml(key)}" class="table-row">
+              <td>${escapeHtml(formatCPF(row.cpf))}</td>
+              <td>${escapeHtml(row.nome || "")}</td>
+              <td>Bolsista</td>
+              <td>${escapeHtml(pagamento.aloc_projeto || "")}</td>
+              <td>${escapeHtml(pagamento.horas_totais || "")}</td>
+              <td>${escapeHtml(pagamento.horas_projeto || "")}</td>
+              <td>${escapeHtml(pagamento.perc_horas || "")}</td>
+              <td>${escapeHtml(formatBRL(valorBolsa))}</td>
+              <td>${escapeHtml(formatBRL(encargos))}</td>
+              <td>${escapeHtml(formatBRL(beneficios))}</td>
+              <td>${escapeHtml(formatBRL(provisionamento))}</td>
+              <td><strong>${escapeHtml(formatBRL(total))}</strong></td>
+              <td>${escapeHtml(pagamento.num_extrato || "")}</td>
+              <td>${escapeHtml(pagamento.nf_nd || "")}</td>
+              <td>${escapeHtml(pagamento.data_emissao ? formatDateBR(pagamento.data_emissao) : "")}</td>
+              <td>${escapeHtml(pagamento.data_pagamento ? formatDateBR(pagamento.data_pagamento) : "")}</td>
+            </tr>
+          `
+        })
+        .join("")
+
+      tbody.innerHTML = rowsHtml
+    }
+
+    const wirePagamentosTableClicks = () => {
+      const tbody = document.getElementById("lista-pagamentos")
+      tbody?.addEventListener("click", (ev) => {
+        const rowEl = ev.target.closest("tr[data-key]")
+        if (!rowEl) return
+        const { key } = rowEl.dataset
+        openPagamentoModal(key)
+      })
+    }
+
+    const openPagamentoModal = (key) => {
+      const modal = document.getElementById("pagamento-modal")
+      if (!modal) return
+
+      const [bolsistaId, periodo] = key.split("_")
+      const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
+      if (!bolsista) return
+
+      const pagamento = pagamentos.find((p) => p.key === key) || {}
+
+      editingPagamentoKey = key
+
+      document.getElementById("pagamento-bolsista-id").value = bolsistaId
+      document.getElementById("pagamento-periodo").value = periodo
+      document.getElementById("pagamento-cpf").value = formatCPF(bolsista.cpf)
+      document.getElementById("pagamento-favorecido").value = bolsista.nome || ""
+      document.getElementById("pagamento-tipo").value = "Bolsista"
+      document.getElementById("pagamento-aloc-projeto").value = pagamento.aloc_projeto || ""
+      document.getElementById("pagamento-horas-totais").value = pagamento.horas_totais || ""
+      document.getElementById("pagamento-horas-projeto").value = pagamento.horas_projeto || ""
+      document.getElementById("pagamento-perc-horas").value = pagamento.perc_horas || ""
+      document.getElementById("pagamento-valor-bolsa").value = formatBRL(bolsista.valor)
+      document.getElementById("pagamento-encargos").value = pagamento.encargos
+        ? formatBRL(parseMoney(pagamento.encargos))
+        : ""
+      document.getElementById("pagamento-beneficios").value = pagamento.beneficios
+        ? formatBRL(parseMoney(pagamento.beneficios))
+        : ""
+      document.getElementById("pagamento-provisionamento").value = pagamento.provisionamento
+        ? formatBRL(parseMoney(pagamento.provisionamento))
+        : ""
+      document.getElementById("pagamento-num-extrato").value = pagamento.num_extrato || ""
+      document.getElementById("pagamento-nf-nd").value = pagamento.nf_nd || ""
+      document.getElementById("pagamento-data-emissao").value = pagamento.data_emissao || ""
+      document.getElementById("pagamento-data-pagamento").value = pagamento.data_pagamento || ""
+
+      calcularTotalPagamento()
+
+      if (typeof modal.showModal === "function") modal.showModal()
+      else modal.setAttribute("open", "")
+    }
+
+    const closePagamentoModal = () => {
+      const modal = document.getElementById("pagamento-modal")
+      if (!modal) return
+      modal.close()
+      editingPagamentoKey = null
+
+      const feedback = document.getElementById("pagamento-form-feedback")
+      if (feedback) feedback.textContent = ""
+    }
+
+    const calcularTotalPagamento = () => {
+      const valorBolsaRaw = document.getElementById("pagamento-valor-bolsa")?.value || ""
+      const encargosRaw = document.getElementById("pagamento-encargos")?.value || ""
+      const beneficiosRaw = document.getElementById("pagamento-beneficios")?.value || ""
+      const provisionamentoRaw = document.getElementById("pagamento-provisionamento")?.value || ""
+
+      const valorBolsa = parseMoney(valorBolsaRaw) || 0
+      const encargos = parseMoney(encargosRaw) || 0
+      const beneficios = parseMoney(beneficiosRaw) || 0
+      const provisionamento = parseMoney(provisionamentoRaw) || 0
+
+      const total = valorBolsa + encargos + beneficios + provisionamento
+
+      const totalInput = document.getElementById("pagamento-total")
+      if (totalInput) {
+        totalInput.value = formatBRL(total)
+      }
+    }
+
+    const normalizePagamentoMoneyInputs = () => {
+      const encargosInput = document.getElementById("pagamento-encargos")
+      const beneficiosInput = document.getElementById("pagamento-beneficios")
+      const provisionamentoInput = document.getElementById("pagamento-provisionamento")
+
+      if (encargosInput) {
+        const num = parseMoney(encargosInput.value)
+        encargosInput.value = num != null ? formatBRL(num) : ""
+      }
+
+      if (beneficiosInput) {
+        const num = parseMoney(beneficiosInput.value)
+        beneficiosInput.value = num != null ? formatBRL(num) : ""
+      }
+
+      if (provisionamentoInput) {
+        const num = parseMoney(provisionamentoInput.value)
+        provisionamentoInput.value = num != null ? formatBRL(num) : ""
+      }
+
+      calcularTotalPagamento()
+    }
+
+    const wirePagamentoInputs = () => {
+      const encargosInput = document.getElementById("pagamento-encargos")
+      const beneficiosInput = document.getElementById("pagamento-beneficios")
+      const provisionamentoInput = document.getElementById("pagamento-provisionamento")
+
+      encargosInput?.addEventListener("blur", normalizePagamentoMoneyInputs)
+      beneficiosInput?.addEventListener("blur", normalizePagamentoMoneyInputs)
+      provisionamentoInput?.addEventListener("blur", normalizePagamentoMoneyInputs)
+
+      encargosInput?.addEventListener("input", calcularTotalPagamento)
+      beneficiosInput?.addEventListener("input", calcularTotalPagamento)
+      provisionamentoInput?.addEventListener("input", calcularTotalPagamento)
+    }
+
+    const wirePagamentoButtons = () => {
+      const btnClose = document.getElementById("pagamento-modal-close")
+      const btnCancelar = document.getElementById("pagamento-btn-cancelar")
+
+      btnClose?.addEventListener("click", closePagamentoModal)
+      btnCancelar?.addEventListener("click", closePagamentoModal)
+    }
+
+    const wirePagamentoForm = () => {
+      const form = document.getElementById("pagamento-form")
+      const feedback = document.getElementById("pagamento-form-feedback")
+
+      form?.addEventListener("submit", (e) => {
+        e.preventDefault()
+
+        if (!editingPagamentoKey) return
+
+        const [bolsistaId, periodo] = editingPagamentoKey.split("_")
+        const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
+        if (!bolsista) return
+
+        const pagamentoData = {
+          key: editingPagamentoKey,
+          bolsista_id: bolsistaId,
+          periodo: periodo,
+          aloc_projeto: document.getElementById("pagamento-aloc-projeto")?.value || "",
+          horas_totais: document.getElementById("pagamento-horas-totais")?.value || "",
+          horas_projeto: document.getElementById("pagamento-horas-projeto")?.value || "",
+          perc_horas: document.getElementById("pagamento-perc-horas")?.value || "",
+          valor_bolsa: formatBRL(bolsista.valor),
+          encargos: document.getElementById("pagamento-encargos")?.value || "",
+          beneficios: document.getElementById("pagamento-beneficios")?.value || "",
+          provisionamento: document.getElementById("pagamento-provisionamento")?.value || "",
+          num_extrato: document.getElementById("pagamento-num-extrato")?.value || "",
+          nf_nd: document.getElementById("pagamento-nf-nd")?.value || "",
+          data_emissao: document.getElementById("pagamento-data-emissao")?.value || "",
+          data_pagamento: document.getElementById("pagamento-data-pagamento")?.value || "",
+          updatedAt: new Date().toISOString(),
+        }
+
+        const existingIndex = pagamentos.findIndex((p) => p.key === editingPagamentoKey)
+        if (existingIndex >= 0) {
+          pagamentos[existingIndex] = pagamentoData
+        } else {
+          pagamentos.push(pagamentoData)
+        }
+
+        savePagamentosLocal()
+        renderPagamentosTable()
+        closePagamentoModal()
+
+        if (feedback) {
+          feedback.textContent = "Pagamento salvo com sucesso!"
+          feedback.classList.add("form-feedback--success")
+          setTimeout(() => {
+            feedback.textContent = ""
+            feedback.classList.remove("form-feedback--success")
+          }, 3000)
+        }
+      })
     }
 
     const init = () => {
@@ -1274,6 +1571,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       wireButtons()
       wireForm()
       wireTableClicks()
+      wirePagamentosTableClicks()
+      wirePagamentoInputs()
+      wirePagamentoButtons()
+      wirePagamentoForm()
       loadProject()
     }
 

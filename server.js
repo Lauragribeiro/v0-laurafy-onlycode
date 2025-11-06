@@ -57,12 +57,18 @@ async function ensureBaseDirs() {
 
   try {
     console.log("[server] 🔄 Verificando e criando templates...")
-    const created = await ensureTemplatesExist()
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Template creation timeout")), 10000),
+    )
+
+    const created = await Promise.race([ensureTemplatesExist(), timeoutPromise]).catch((err) => {
+      console.warn("[server] ⚠️  Timeout ou erro ao criar templates:", err.message)
+      return 0
+    })
 
     if (created > 0) {
       console.log(`[server] ✅ ${created} template(s) criado(s) com sucesso`)
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      console.log("[server] ⏸️  Aguardando 1 segundo para garantir que os templates foram salvos...")
     } else {
       console.log("[server] ✓ Todos os templates já existem")
     }
@@ -85,19 +91,27 @@ async function ensureBaseDirs() {
     }
 
     if (!allExist) {
-      console.error("[server] ⚠️  ATENÇÃO: Alguns templates críticos não foram criados!")
-      console.error("[server] Execute 'npm run generate-templates' para recriar os templates")
+      console.warn("[server] ⚠️  ATENÇÃO: Alguns templates críticos não foram criados!")
+      console.warn("[server] O servidor continuará, mas algumas funcionalidades podem não funcionar")
     } else {
       console.log("[server] ✅ Todos os templates críticos estão disponíveis")
     }
   } catch (error) {
     console.error("[server] ❌ Erro ao verificar templates:", error.message)
-    console.error("[server] Stack:", error.stack)
+    console.warn("[server] ⚠️  O servidor continuará mesmo com erro nos templates")
   }
 
   console.log("[server] ========================================")
 }
-await ensureBaseDirs()
+
+console.log("[server] 🚀 Preparando inicialização...")
+await Promise.race([
+  ensureBaseDirs(),
+  new Promise((_, reject) => setTimeout(() => reject(new Error("Startup timeout")), 15000)),
+]).catch((err) => {
+  console.error("[server] ❌ Erro na inicialização:", err.message)
+  console.warn("[server] ⚠️  Continuando mesmo com erro...")
+})
 
 console.log("[server] TEMPLATE_BASE:", TEMPLATE_BASE)
 
@@ -1079,7 +1093,7 @@ app.get("/api/debug/templates", (_req, res) => {
     try {
       listing[d] = fs.readdirSync(d)
     } catch (e) {
-      listing[d] = `NÃO ENCONTREI (${e.message})`
+      listing[d] = `NÃO ENCONTRAPI (${e.message})`
     }
   }
   res.json({ TEMPLATE_BASE, listing })
@@ -1836,7 +1850,6 @@ app.use((err, _req, res, _next) => {
 /* ===== Start (único) ===== */
 const DEFAULT_PORT = Number.parseInt(process.env.PORT, 10) || 3000
 const HOST = "0.0.0.0"
-
 function startServer(port = DEFAULT_PORT) {
   if (globalThis.__serverStarted) return
   globalThis.__serverStarted = true
@@ -1847,13 +1860,12 @@ function startServer(port = DEFAULT_PORT) {
 
   const server = app.listen(port, HOST, () => {
     console.log("[server] ========================================")
-    console.log("[server] ✅ Servidor rodando com sucesso!")
-    console.log(`[server] 🌐 URL interna: http://${HOST}:${port}`)
+    console.log(`[server] ✅ Servidor rodando com sucesso!`)
+    console.log(`[server] 🌐 URL: http://localhost:${port}`)
     console.log(`[server] 📂 TEMPLATE_BASE: ${TEMPLATE_BASE}`)
     console.log("[server] ========================================")
     console.log("[server] 💡 IMPORTANTE: Abra o navegador e acesse:")
-    console.log(`    http://localhost:${port}`)
-    console.log("    ou http://<IP_DA_VM>:" + port)
+    console.log(`[server]    http://localhost:${port}`)
     console.log("[server] ========================================")
   })
 
