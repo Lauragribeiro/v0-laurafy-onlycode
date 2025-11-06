@@ -634,7 +634,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     let bolsistas = []
     let editingId = null
     let termoUpload = null
-    let currentPeriodosVinculados = []
+    const currentPeriodosVinculados = []
 
     const storageKey = () => `bolsas_${projectId || "default"}`
 
@@ -846,7 +846,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const removerPeriodo = (periodo) => {
-      currentPeriodosVinculados = currentPeriodosVinculados.filter((p) => p !== periodo)
+      const index = currentPeriodosVinculados.indexOf(periodo)
+      if (index > -1) {
+        currentPeriodosVinculados.splice(index, 1)
+      }
       renderPeriodosChips()
     }
 
@@ -928,7 +931,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       setTermoFeedback("")
       updateHistoricoSection(null)
       termoUpload = null
-      currentPeriodosVinculados = []
+      currentPeriodosVinculados.length = 0
       renderPeriodosChips()
     }
 
@@ -960,14 +963,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (funcaoInput) funcaoInput.value = row.funcao || ""
       if (valorInput) valorInput.value = formatBRL(row.valor) || ""
 
-      currentPeriodosVinculados = Array.isArray(row.periodos_vinculados) ? [...row.periodos_vinculados] : []
+      currentPeriodosVinculados.length = 0
+      currentPeriodosVinculados.push(...(Array.isArray(row.periodos_vinculados) ? row.periodos_vinculados : []))
       renderPeriodosChips()
 
       const termo = row.termo || null
       if (termo) {
         if (termoFileName) termoFileName.textContent = termo.fileName || "Termo carregado."
-
-        console.log("[v0] fillModalWithRow - Carregando termo:", termo)
 
         updateTermoSummary({
           fileName: termo.fileName,
@@ -1084,6 +1086,72 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       btnExportarExcel?.addEventListener("click", exportarParaExcel)
     }
 
+    const wireForm = () => {
+      form?.addEventListener("submit", async (e) => {
+        e.preventDefault()
+        setFormFeedback("")
+
+        const nome = nomeInput?.value?.trim() || ""
+        const cpfRaw = cpfInput?.value || ""
+        const funcao = funcaoInput?.value?.trim() || ""
+        const valorRaw = valorInput?.value || ""
+
+        if (!nome) {
+          setFormFeedback("Nome completo é obrigatório.", "error")
+          nomeInput?.focus()
+          return
+        }
+
+        const cpfDigits = onlyDigits(cpfRaw)
+        if (!validateCPF(cpfDigits)) {
+          setFormFeedback("CPF inválido.", "error")
+          cpfInput?.focus()
+          return
+        }
+
+        if (!funcao) {
+          setFormFeedback("Função no projeto é obrigatória.", "error")
+          funcaoInput?.focus()
+          return
+        }
+
+        const valorNum = parseMoney(valorRaw)
+        if (valorNum == null || valorNum <= 0) {
+          setFormFeedback("Valor da bolsa inválido.", "error")
+          valorInput?.focus()
+          return
+        }
+
+        if (currentPeriodosVinculados.length === 0) {
+          setFormFeedback("Adicione pelo menos um período de vinculação.", "error")
+          periodoMesInput?.focus()
+          return
+        }
+
+        const existingRecord = editingId ? bolsistas.find((b) => String(b.id) === String(editingId)) : null
+
+        const record = buildBolsistaRecord({
+          editingId,
+          nome,
+          cpfDigits,
+          funcao,
+          valorNum,
+          termoUpload,
+          fallbackTermo: existingRecord?.termo,
+          existingRecord,
+          periodosVinculados: [...currentPeriodosVinculados],
+        })
+
+        bolsistas = upsertBolsistas(bolsistas, record, editingId)
+        saveLocal()
+        renderTable()
+        updateFiltroPeriodo()
+        closeModal()
+
+        setFormFeedback(editingId ? "Bolsista atualizado com sucesso!" : "Bolsista cadastrado com sucesso!", "success")
+      })
+    }
+
     const initTabs = () => {
       const qs = projectId ? `?id=${encodeURIComponent(projectId)}` : ""
       if (tabEvid) tabEvid.href = `/prestacao.html${qs}`
@@ -1118,26 +1186,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         initTabs()
         loadLocal()
         renderTable()
+        updateFiltroPeriodo()
       } catch (err) {
         console.error("Falha ao carregar dados do projeto.", err)
         initTabs()
         loadLocal()
         renderTable()
+        updateFiltroPeriodo()
       }
     }
 
     const init = () => {
-      const params = new URLSearchParams(window.location.search)
-      projectId = params.get("id") || ""
-
-      if (projectId) {
-        loadLocal()
-        renderTable()
-        updateFiltroPeriodo()
-      }
-
       wireInputs()
       wireButtons()
+      wireForm()
       wireTableClicks()
       loadProject()
     }

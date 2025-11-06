@@ -1894,7 +1894,4 @@ function startServer(port = DEFAULT_PORT) {
 console.log("[server] ========================================")
 console.log("[server] 📋 Iniciando aplicação...")
 console.log("[server] ========================================")
-startServer().log("[server] ========================================")
-console.log("[server] 📋 Iniciando aplicação...")
-console.log("[server] ========================================")
 startServer()
