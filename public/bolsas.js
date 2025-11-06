@@ -17,23 +17,56 @@ export const resolveStoredBolsistas = ({ previous = [], stored = null, projectId
 
   return { list: Array.isArray(stored) ? [...stored] : [], shouldPersist: false }
 }
+const normalizeTermoFields = (source = {}, parsedAt = null) => {
+  if (!source) return null
 
+  const inicio =
+    source.inicio_vigencia ?? source.vigenciaInicio ?? (source.parsed?.inicio_vigencia ?? source.parsed?.vigenciaInicio) ?? null
+  const fim =
+    source.fim_vigencia ??
+    source.vigenciaFim ??
+    source.vigenciaISO ??
+    (source.parsed?.fim_vigencia ?? source.parsed?.vigenciaFim ?? source.parsed?.vigenciaISO) ??
+    null
+  const fonteTexto =
+    source.fonte_texto ?? source.vigenciaRaw ?? source.parsed?.fonte_texto ?? source.parsed?.vigenciaRaw ?? ""
+
+  return {
+    fileName: source.fileName || source.parsed?.fileName || "termo.pdf",
+    size: source.size ?? source.parsed?.size ?? null,
+    inicio_vigencia: inicio,
+    fim_vigencia: fim,
+    vigenciaInicio: inicio,
+    vigenciaFim: fim,
+    vigenciaISO: fim,
+    vigenciaRaw: fonteTexto,
+    fonte_texto: fonteTexto,
+    valorMaximo:
+      source.valorMaximo ?? source.parsed?.valorMaximo ?? null,
+    valorMaximoRaw:
+      source.valorMaximoRaw ?? source.parsed?.valorMaximoRaw ?? "",
+    parsedAt: parsedAt ?? source.parsedAt ?? source.parsed?.parsedAt ?? null,
+    rawText: source.rawText ?? source.parsed?.rawText ?? "",
+  }
+}
 export const buildTermoData = (upload, fallback = null, now = defaultNow) => {
   if (upload) {
-    const stamp = now()
-    const iso = stamp.toISOString()
-    return {
-      fileName: upload.fileName,
-      vigenciaRaw: upload.parsed?.vigenciaRaw || "",
-      vigenciaISO: upload.parsed?.vigenciaISO || null,
-      valorMaximoRaw: upload.parsed?.valorMaximoRaw || "",
-      valorMaximo: upload.parsed?.valorMaximo ?? null,
-      parsedAt: iso,
-    }
+     const stamp = typeof now === "function" ? now() : defaultNow()
+    const parsedAt = stamp instanceof Date ? stamp.toISOString() : new Date(stamp).toISOString()
+    const normalized = normalizeTermoFields(
+      {
+        fileName: upload.fileName,
+        size: upload.size,
+        rawText: upload.rawText,
+        parsed: upload.parsed || {},
+      },
+      parsedAt,
+    )
+    return normalized
   }
 
   if (fallback) {
-    return { ...fallback }
+    return normalizeTermoFields({ ...fallback }, fallback.parsedAt ?? null)
   }
 
   return null
@@ -49,52 +82,35 @@ export const buildBolsistaRecord = ({
   fallbackTermo = null,
   existingRecord = null,
   periodosVinculados = [],
+   now = defaultNow,
+  idFactory = defaultIdFactory,
 } = {}) => {
-  const now = new Date().toISOString()
-  const id = editingId ?? Date.now()
+   const stamp = typeof now === "function" ? now() : defaultNow()
+  const atualizadoEm = stamp instanceof Date ? stamp.toISOString() : new Date(stamp).toISOString()
+  const id = editingId ?? (typeof idFactory === "function" ? idFactory() : defaultIdFactory())
 
-  let termo = null
-  if (termoUpload) {
-    termo = {
-      fileName: termoUpload.fileName || "termo.pdf",
-      inicio_vigencia: termoUpload.parsed?.inicio_vigencia || null,
-      fim_vigencia: termoUpload.parsed?.fim_vigencia || null,
-      vigenciaInicio: termoUpload.parsed?.inicio_vigencia || null,
-      vigenciaFim: termoUpload.parsed?.fim_vigencia || null,
-      vigenciaISO: termoUpload.parsed?.fim_vigencia || termoUpload.parsed?.vigenciaISO || null,
-      vigenciaRaw: termoUpload.parsed?.fonte_texto || termoUpload.parsed?.vigenciaRaw || "",
-      fonte_texto: termoUpload.parsed?.fonte_texto || "",
-      valorMaximo: termoUpload.parsed?.valorMaximo || null,
-      valorMaximoRaw: termoUpload.parsed?.valorMaximoRaw || "",
-    }
-  } else if (fallbackTermo) {
-    termo = {
-      fileName: fallbackTermo.fileName || "termo.pdf",
-      inicio_vigencia: fallbackTermo.inicio_vigencia || fallbackTermo.vigenciaInicio || null,
-      fim_vigencia: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || fallbackTermo.vigenciaISO || null,
-      vigenciaInicio: fallbackTermo.inicio_vigencia || fallbackTermo.vigenciaInicio || null,
-      vigenciaFim: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || null,
-      vigenciaISO: fallbackTermo.fim_vigencia || fallbackTermo.vigenciaFim || fallbackTermo.vigenciaISO || null,
-      vigenciaRaw: fallbackTermo.fonte_texto || fallbackTermo.vigenciaRaw || "",
-      fonte_texto: fallbackTermo.fonte_texto || fallbackTermo.vigenciaRaw || "",
-      valorMaximo: fallbackTermo.valorMaximo || null,
-      valorMaximoRaw: fallbackTermo.valorMaximoRaw || "",
-    }
-  }
+  const termo = buildTermoData(termoUpload, fallbackTermo, () => stamp)
 
   const historicoAlteracoes = Array.isArray(existingRecord?.historicoAlteracoes)
     ? [...existingRecord.historicoAlteracoes]
     : []
 
   if (editingId && existingRecord) {
-    const changes = []
-    if (existingRecord.funcao !== funcao) changes.push(`Função: ${existingRecord.funcao} → ${funcao}`)
-    if (existingRecord.valor !== valorNum) changes.push(`Valor: R$ ${existingRecord.valor} → R$ ${valorNum}`)
-
-    if (changes.length > 0) {
+    if (existingRecord.funcao !== funcao) {
       historicoAlteracoes.push({
-        data: now,
-        alteracoes: changes,
+        campo: "funcao",
+        anterior: existingRecord.funcao ?? "",
+        atual: funcao,
+        modificadoEm: atualizadoEm,
+      })
+    }
+
+       if (existingRecord.valor !== valorNum) {
+      historicoAlteracoes.push({
+               campo: "valor",
+        anterior: existingRecord.valor ?? null,
+        atual: valorNum,
+        modificadoEm: atualizadoEm,
       })
     }
   }
@@ -108,7 +124,7 @@ export const buildBolsistaRecord = ({
     termo,
     historicoAlteracoes,
     periodos_vinculados: Array.isArray(periodosVinculados) ? [...periodosVinculados] : [],
-    updatedAt: now,
+        atualizadoEm,
   }
 }
 
@@ -997,7 +1013,62 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       fillModalWithRow(row)
       openModal()
     }
+ const handleFormSubmit = (event) => {
+      event.preventDefault()
+      if (!form) return
 
+      setFormFeedback("")
+
+      const nome = nomeInput?.value?.trim() || ""
+      if (!nome) {
+        setFormFeedback("Informe o nome completo do bolsista.", "error")
+        nomeInput?.focus()
+        return
+      }
+
+      const cpfDigits = onlyDigits(cpfInput?.value || "")
+      if (!validateCPF(cpfDigits)) {
+        setFormFeedback("CPF inválido. Verifique os 11 dígitos informados.", "error")
+        cpfInput?.focus()
+        return
+      }
+
+      const funcao = funcaoInput?.value?.trim() || ""
+      if (!funcao) {
+        setFormFeedback("Informe a função exercida no projeto.", "error")
+        funcaoInput?.focus()
+        return
+      }
+
+      const valorBruto = valorInput?.value ?? ""
+      const valorNum = parseMoney(valorBruto)
+      if (valorNum == null) {
+        setFormFeedback("Informe o valor da bolsa em reais.", "error")
+        valorInput?.focus()
+        return
+      }
+
+      const existingRecord =
+        editingId != null ? bolsistas.find((item) => String(item.id) === String(editingId)) || null : null
+
+      const record = buildBolsistaRecord({
+        editingId,
+        nome,
+        cpfDigits,
+        funcao,
+        valorNum,
+        termoUpload,
+        fallbackTermo: existingRecord?.termo || null,
+        existingRecord,
+        periodosVinculados: currentPeriodosVinculados,
+      })
+
+      bolsistas = upsertBolsistas(bolsistas, record, editingId)
+      saveLocal()
+      updateFiltroPeriodo()
+      renderTable()
+      closeModal()
+    }
     const normalizeValorInput = () => {
       if (!valorInput) return
       const num = parseMoney(valorInput.value)
@@ -1079,6 +1150,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       btnNovo?.addEventListener("click", openCreateModal)
       btnClose?.addEventListener("click", closeModal)
       btnCancelar?.addEventListener("click", closeModal)
+
+      form?.addEventListener("submit", handleFormSubmit)
 
       filtroPeriodo?.addEventListener("change", renderTable)
       btnExportarExcel?.addEventListener("click", exportarParaExcel)
