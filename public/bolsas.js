@@ -694,7 +694,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       try {
         const raw = localStorage.getItem(pagamentosStorageKey())
         if (raw) {
-          const parsed = JSON.JSON.parse(raw)
+          const parsed = JSON.parse(raw)
           if (Array.isArray(parsed)) {
             pagamentos = parsed
           }
@@ -1390,7 +1390,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
     const wirePagamentosTableClicks = () => {
       const tbody = document.getElementById("lista-pagamentos")
-      console.log("[v0] wirePagamentosTableClicks - tbody found:", !!tbody)
 
       if (!tbody) {
         console.error("[v0] tbody lista-pagamentos not found!")
@@ -1401,19 +1400,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       tbody.parentNode.replaceChild(newTbody, tbody)
 
       newTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Click detected on tbody")
         const rowEl = ev.target.closest("tr[data-key]")
-        console.log("[v0] Row element found:", !!rowEl)
         if (!rowEl) return
         const { key } = rowEl.dataset
-        console.log("[v0] Opening modal for key:", key)
         openPagamentoModal(key)
       })
-      console.log("[v0] Event listener registered successfully")
     }
 
     const openPagamentoModal = (key) => {
-      console.log("[v0] openPagamentoModal called with key:", key)
       const modal = document.getElementById("pagamento-modal")
       if (!modal) {
         console.error("[v0] Pagamento modal not found!")
@@ -1421,7 +1415,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       }
 
       const [bolsistaId, periodo] = key.split("_")
-      console.log("[v0] Bolsista ID:", bolsistaId, "Periodo:", periodo)
 
       const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
       if (!bolsista) {
@@ -1430,7 +1423,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       }
 
       const pagamento = pagamentos.find((p) => p.key === key) || {}
-      console.log("[v0] Pagamento data:", pagamento)
 
       editingPagamentoKey = key
 
@@ -1460,7 +1452,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       calcularTotalPagamento()
 
-      console.log("[v0] Opening modal...")
       if (typeof modal.showModal === "function") modal.showModal()
       else modal.setAttribute("open", "")
     }
