@@ -702,7 +702,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       try {
         const raw = localStorage.getItem(pagamentosStorageKey())
         if (raw) {
-          const parsed = JSON.JSON.parse(raw)
+          const parsed = JSON.parse(raw)
           if (Array.isArray(parsed)) {
             pagamentos = parsed
           }
