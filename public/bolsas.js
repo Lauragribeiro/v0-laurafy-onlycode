@@ -1330,10 +1330,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
     const renderPagamentosTable = () => {
       const tbody = document.getElementById("lista-pagamentos")
-      if (!tbody) return
+      if (!tbody) {
+        console.log("[v0] tbody lista-pagamentos não encontrado")
+        return
+      }
 
       const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos")
       const periodoFiltro = filtroPeriodoPagamentos?.value || ""
+
+      console.log("[v0] Renderizando tabela. Período filtro:", periodoFiltro)
+      console.log("[v0] Total de bolsistas:", bolsistas.length)
 
       if (!periodoFiltro) {
         tbody.innerHTML =
@@ -1343,8 +1349,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const bolsistasFiltrados = bolsistas.filter((row) => {
         const periodos = row.periodos_vinculados || []
-        return periodos.includes(periodoFiltro)
+        const includes = periodos.includes(periodoFiltro)
+        console.log("[v0] Bolsista:", row.nome, "Periodos:", periodos, "Includes:", includes)
+        return includes
       })
+
+      console.log("[v0] Bolsistas filtrados:", bolsistasFiltrados.length)
 
       if (bolsistasFiltrados.length === 0) {
         tbody.innerHTML = '<tr class="table-empty"><td colspan="16">Nenhum bolsista vinculado a este período.</td></tr>'
@@ -1386,6 +1396,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         .join("")
 
       tbody.innerHTML = rowsHtml
+      console.log("[v0] Tabela renderizada com", bolsistasFiltrados.length, "linhas")
 
       wirePagamentosTableClicks()
     }
@@ -1393,15 +1404,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const wirePagamentosTableClicks = () => {
       const tbody = document.getElementById("lista-pagamentos")
       if (!tbody) {
-        console.log("[v0] tbody lista-pagamentos não encontrado")
+        console.log("[v0] tbody lista-pagamentos não encontrado em wirePagamentosTableClicks")
         return
       }
 
-      // Remove event listeners antigos usando replaceWith
-      const newTbody = tbody.cloneNode(false)
+      const newTbody = tbody.cloneNode(true)
       tbody.parentNode.replaceChild(newTbody, tbody)
 
-      // Adiciona event listener no tbody novo
       const finalTbody = document.getElementById("lista-pagamentos")
       if (!finalTbody) {
         console.log("[v0] finalTbody não encontrado após clonagem")
@@ -1409,7 +1418,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       }
 
       finalTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado no tbody", ev.target)
+        console.log("[v0] Click detectado", ev.target)
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
@@ -1418,7 +1427,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         }
 
         const { key } = rowEl.dataset
-        console.log("[v0] Key encontrada:", key)
+        console.log("[v0] Key da linha clicada:", key)
 
         if (!key) {
           console.log("[v0] Key vazia")
@@ -1428,7 +1437,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         openPagamentoModal(key)
       })
 
-      console.log("[v0] Event listener registrado com sucesso no tbody")
+      console.log("[v0] Event listener registrado com sucesso")
     }
 
     const openPagamentoModal = (key) => {
