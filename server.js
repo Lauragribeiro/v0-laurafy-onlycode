@@ -1380,7 +1380,6 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
     })
 
     const raw = resp.choices?.[0]?.message?.content || "{}"
-    // </CHANGE>
 
     let data
     try {
@@ -1852,6 +1851,7 @@ const DEFAULT_PORT = Number.parseInt(process.env.PORT, 10) || 3000
 const HOST = "0.0.0.0"
 function startServer(port = DEFAULT_PORT) {
   if (globalThis.__serverStarted) return
+
   globalThis.__serverStarted = true
 
   console.log("[server] ========================================")
