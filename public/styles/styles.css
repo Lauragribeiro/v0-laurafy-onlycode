@@ -1354,134 +1354,6 @@ body {
 .muted {
   color: #6b7280;
 }
-
-/* Reuso de inputs/botões se precisar */
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.field > span {
-  font-size: 13px;
-  color: #4b5563;
-}
-.field > input,
-.field > select {
-  padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-}
-
-/* ===== Subnav (tabs) ===== */
-.subnav {
-  position: sticky;
-  top: 64px;
-  z-index: 9;
-  background: #fff;
-  border-bottom: 1px solid var(--color-tertiary-light);
-}
-.subnav-inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.subnav-title {
-  font-weight: 800;
-  color: #111827;
-}
-.tabs {
-  display: flex;
-  gap: 8px;
-}
-.tab {
-  text-decoration: none;
-  font-weight: 700;
-  padding: 8px 12px;
-  border-radius: 999px;
-  color: #374151;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-}
-.tab.active {
-  background: var(--color-tertiary-light);
-  border-color: var(--color-secondary-soft);
-  color: var(--color-primary);
-}
-
-/* ===== Blocks/cards ===== */
-.block {
-  margin: 18px 0;
-}
-.block-title {
-  margin: 0 0 10px;
-  font-size: 22px;
-}
-.card.block {
-  background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(16, 24, 40, 0.08);
-  padding: 18px;
-}
-
-.divider {
-  height: 1px;
-  background: var(--color-tertiary-light);
-  margin: 12px 0;
-}
-
-.project-head {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
-  color: #374151;
-}
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(220px, 1fr));
-  gap: 14px;
-}
-.upload-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
-  margin-bottom: 14px;
-}
-.upload-box input[type="file"] {
-  max-width: 300px;
-}
-.table-wrap {
-  overflow: auto;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.06);
-}
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.table th,
-.table td {
-  padding: 12px 10px;
-  border-bottom: 1px solid var(--color-tertiary-light);
-  text-align: left;
-}
-.table th {
-  background: #f8fafc;
-  font-weight: 700;
-}
-.muted {
-  color: #6b7280;
-}
 .field {
   display: flex;
   flex-direction: column;
@@ -1668,7 +1540,16 @@ body {
   border-color: #1976d2;
   box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
 }
-/* </CHANGE> */
+/* </CHANGE> Adicionando estilos para linhas ocultas da tabela de bolsistas */
+.table-row--hidden {
+  background-color: #f5f5f5;
+  opacity: 0.7;
+}
+
+.table-row--hidden:hover {
+  background-color: #e8e8e8;
+  opacity: 0.85;
+}
 
 .chips {
   margin-top: 6px;

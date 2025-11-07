@@ -60,7 +60,12 @@
       <div class="block-head">
         <h2 class="block-title">Recursos Humanos</h2>
         <div style="display: flex; align-items: center; gap: 1rem;">
-          <!-- Adicionando filtro de período e botão de exportação Excel -->
+          <!-- Adicionando campo de busca -->
+          <label style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="tiny muted">Buscar bolsista:</span>
+            <input type="text" id="search-bolsista" class="form-input" placeholder="Digite o nome..." style="min-width: 200px;" />
+          </label>
+          
           <label style="display: flex; align-items: center; gap: 0.5rem;">
             <span class="tiny muted">Filtrar por período:</span>
             <select id="filtro-periodo" class="form-select" style="min-width: 150px;">

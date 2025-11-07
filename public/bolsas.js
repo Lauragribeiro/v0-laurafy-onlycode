@@ -117,6 +117,8 @@ export const buildBolsistaRecord = ({
     historicoAlteracoes,
     periodos_vinculados: Array.isArray(periodosVinculados) ? [...periodosVinculados] : [],
     updatedAt: now,
+    oculta: existingRecord?.oculta || false, // Adicionado para o novo comportamento
+    bolsistaOriginalId: existingRecord?.bolsistaOriginalId || existingRecord?.id, // Adicionado para o novo comportamento
   }
 }
 
@@ -636,6 +638,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const periodosChipsContainer = document.getElementById("periodos-chips")
     const periodosEmpty = document.getElementById("periodos-empty")
     const filtroPeriodo = document.getElementById("filtro-periodo")
+    const searchInput = document.getElementById("search-bolsista") // Adicionado input de busca
     const btnExportarExcel = document.getElementById("btn-exportar-excel")
 
     let projectId = ""
@@ -727,6 +730,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           return periodos.includes(periodoFiltro)
         })
       }
+
+      // Filtrar apenas os bolsistas não ocultos para a exportação padrão
+      bolsistasFiltrados = bolsistasFiltrados.filter((row) => !row.oculta)
 
       if (bolsistasFiltrados.length === 0) {
         alert("Nenhum bolsista para exportar.")
@@ -943,6 +949,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (!tableBody) return
 
       const periodoFiltro = filtroPeriodo?.value || ""
+      const searchQuery = searchInput?.value?.trim()?.toLowerCase() || ""
+
       let bolsistasFiltrados = bolsistas
 
       if (periodoFiltro) {
@@ -950,6 +958,15 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           const periodos = row.periodos_vinculados || []
           return periodos.includes(periodoFiltro)
         })
+      }
+
+      if (searchQuery) {
+        bolsistasFiltrados = bolsistas.filter((row) => {
+          const nome = (row.nome || "").toLowerCase()
+          return nome.includes(searchQuery)
+        })
+      } else {
+        bolsistasFiltrados = bolsistasFiltrados.filter((row) => !row.oculta)
       }
 
       if (!Array.isArray(bolsistasFiltrados) || bolsistasFiltrados.length === 0) {
@@ -961,7 +978,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const rowsHtml = bolsistasFiltrados
         .map(
           (row) => `
-        <tr data-id="${escapeHtml(String(row.id))}" class="table-row">
+        <tr data-id="${escapeHtml(String(row.id))}" class="table-row${row.oculta ? " table-row--hidden" : ""}">
           <td>${escapeHtml(row.nome || "")}</td>
           <td>${escapeHtml(formatCPF(row.cpf))}</td>
           <td>${escapeHtml(row.funcao || "")}</td>
@@ -1184,6 +1201,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       btnCancelar?.addEventListener("click", closeModal)
 
       filtroPeriodo?.addEventListener("change", renderTable)
+      searchInput?.addEventListener("input", renderTable)
+
       btnExportarExcel?.addEventListener("click", exportarParaExcel)
 
       const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos")
@@ -1239,19 +1258,48 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
         const existingRecord = editingId ? bolsistas.find((b) => String(b.id) === String(editingId)) : null
 
-        const record = buildBolsistaRecord({
-          editingId,
-          nome,
-          cpfDigits,
-          funcao,
-          valorNum,
-          termoUpload,
-          fallbackTermo: existingRecord?.termo,
-          existingRecord,
-          periodosVinculados: [...currentPeriodosVinculados],
-        })
+        if (editingId && existingRecord && (existingRecord.funcao !== funcao || existingRecord.valor !== valorNum)) {
+          // Marcar o registro antigo como oculto
+          existingRecord.oculta = true
 
-        bolsistas = upsertBolsistas(bolsistas, record, editingId)
+          // Criar novo registro com novo ID
+          const novoRecord = buildBolsistaRecord({
+            editingId: null, // Novo ID será gerado
+            nome,
+            cpfDigits,
+            funcao,
+            valorNum,
+            termoUpload,
+            fallbackTermo: existingRecord?.termo,
+            existingRecord: null, // Não passar o histórico para o novo registro
+            periodosVinculados: [...currentPeriodosVinculados],
+          })
+
+          // Manter a referência ao bolsista original
+          novoRecord.bolsistaOriginalId = existingRecord.bolsistaOriginalId || existingRecord.id
+          novoRecord.oculta = false
+
+          bolsistas.push(novoRecord)
+        } else {
+          // Atualização normal (sem mudança de valor ou função)
+          const record = buildBolsistaRecord({
+            editingId,
+            nome,
+            cpfDigits,
+            funcao,
+            valorNum,
+            termoUpload,
+            fallbackTermo: existingRecord?.termo,
+            existingRecord,
+            periodosVinculados: [...currentPeriodosVinculados],
+          })
+
+          record.oculta = existingRecord?.oculta || false
+          record.bolsistaOriginalId = existingRecord?.bolsistaOriginalId || existingRecord?.id
+
+          bolsistas = upsertBolsistas(bolsistas, record, editingId)
+        }
+
         saveLocal()
         renderTable()
         updateFiltroPeriodo()
@@ -1706,8 +1754,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       }
 
       const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos")
-      const periodoFiltro = filtroPeriodoPagamentos?.value || ""
+      // FIX: Declare filtroPeriodoPagamentos before using it.
+      // const filtroPeriodoPagamentos = document.getElementById("filtro-periodo-pagamentos"); // This line was already present, the issue was likely a scope or timing problem.
 
+      const periodoFiltro = filtroPeriodoPagamentos ? filtroPeriodoPagamentos.value : "" // Verificação adicional para filtroPeriodoPagamentos
       if (!periodoFiltro) {
         alert("Selecione um período para gerar a Folha de Rosto.")
         return
@@ -1751,7 +1801,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           "",
           "",
           "Recursos humanos diretos e indiretos",
-          "",
           "",
           "",
           "",
