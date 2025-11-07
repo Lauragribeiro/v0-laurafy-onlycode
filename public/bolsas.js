@@ -1884,7 +1884,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       ws["!merges"] = merges
 
-      // AplicAR formatações com bordas, cores e negrito
       const borderStyle = {
         top: { style: "thin", color: { rgb: "000000" } },
         bottom: { style: "thin", color: { rgb: "000000" } },
@@ -1902,13 +1901,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             ws[cell_ref] = { t: "s", v: "" }
           }
 
+          if (!ws[cell_ref].s) {
+            ws[cell_ref].s = {}
+          }
+
+          if (!ws[cell_ref].s.font) {
+            ws[cell_ref].s.font = {}
+          }
+          ws[cell_ref].s.font.name = "Arial"
+          ws[cell_ref].s.font.sz = 11
+
           // Cabeçalho do documento (linhas 8-11, colunas B-C)
           if (R >= 8 && R <= 11 && C >= 1 && C <= 2) {
-            ws[cell_ref].s = {
-              font: { name: "Arial", sz: 12, bold: true },
-              alignment: { vertical: "center", horizontal: "left" },
-              border: { right: { style: "thin", color: { rgb: "000000" } } },
-            }
+            ws[cell_ref].s.font = { name: "Arial", sz: 12, bold: true }
+            ws[cell_ref].s.alignment = { vertical: "center", horizontal: "left" }
+            ws[cell_ref].s.border = { right: { style: "thin", color: { rgb: "000000" } } }
           }
 
           // Quadros de bolsistas (a partir da linha 13)
@@ -1919,12 +1926,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             if (isHeaderRow) {
               ws[cell_ref].s = {
                 fill: { fgColor: { rgb: "D3D3D3" } },
-                font: { bold: true, color: { rgb: "666666" } },
+                font: { name: "Arial", sz: 11, bold: true, color: { rgb: "666666" } },
                 alignment: { vertical: "center", horizontal: "center" },
                 border: borderStyle,
               }
             } else if (rowInQuadro === 2 || rowInQuadro === 4) {
               ws[cell_ref].s = {
+                font: { name: "Arial", sz: 11 },
                 alignment: { vertical: "center", horizontal: "center" },
                 border: borderStyle,
               }
