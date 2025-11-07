@@ -1616,14 +1616,36 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const form = document.getElementById("pagamento-form")
       const feedback = document.getElementById("pagamento-form-feedback")
 
+      console.log("[v0] wirePagamentoForm - form encontrado:", !!form)
+
       form?.addEventListener("submit", (e) => {
+        console.log("[v0] Form submit event disparado")
         e.preventDefault()
 
-        if (!editingPagamentoKey) return
+        if (!editingPagamentoKey) {
+          console.log("[v0] editingPagamentoKey está vazio")
+          return
+        }
 
-        const [bolsistaId, periodo] = editingPagamentoKey.split("_")
-        const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
-        if (!bolsista) return
+        console.log("[v0] Processando save para key:", editingPagamentoKey)
+
+        const [bolsistaIdRaw, periodo] = editingPagamentoKey.split("_")
+        const bolsistaId = bolsistaIdRaw.includes("_") ? bolsistaIdRaw.split("_")[0] : bolsistaIdRaw
+
+        console.log("[v0] Buscando bolsista com ID:", bolsistaId)
+
+        const bolsista = bolsistas.find((b) => {
+          const bId = String(b.id).includes("_") ? String(b.id).split("_")[0] : String(b.id)
+          return bId === String(bolsistaId)
+        })
+
+        if (!bolsista) {
+          console.error("[v0] Bolsista não encontrado no save")
+          alert("Erro: Bolsista não encontrado.")
+          return
+        }
+
+        console.log("[v0] Bolsista encontrado:", bolsista.nome)
 
         const pagamentoData = {
           key: editingPagamentoKey,
@@ -1644,16 +1666,25 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           updatedAt: new Date().toISOString(),
         }
 
+        console.log("[v0] Dados do pagamento:", pagamentoData)
+
         const existingIndex = pagamentos.findIndex((p) => p.key === editingPagamentoKey)
         if (existingIndex >= 0) {
           pagamentos[existingIndex] = pagamentoData
+          console.log("[v0] Pagamento atualizado no índice:", existingIndex)
         } else {
           pagamentos.push(pagamentoData)
+          console.log("[v0] Novo pagamento adicionado. Total de pagamentos:", pagamentos.length)
         }
 
         savePagamentosLocal()
+        console.log("[v0] Pagamentos salvos no localStorage")
+
         renderPagamentosTable()
+        console.log("[v0] Tabela de pagamentos renderizada")
+
         closePagamentoModal()
+        console.log("[v0] Modal fechado")
 
         if (feedback) {
           feedback.textContent = "Pagamento salvo com sucesso!"
@@ -1664,6 +1695,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           }, 3000)
         }
       })
+
+      console.log("[v0] Event listener de submit registrado")
     }
 
     const gerarFolhaDeRosto = () => {
