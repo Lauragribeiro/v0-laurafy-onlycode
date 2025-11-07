@@ -1420,11 +1420,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         return
       }
 
+      // Clone a tabela inteira para remover todos os event listeners
       const newTable = table.cloneNode(true)
       table.parentNode.replaceChild(newTable, table)
 
+      // Obter referência atualizada da tabela
       const finalTable = document.getElementById("tbl-pagamentos")
 
+      // Registrar event listener na tabela (event delegation)
       finalTable.addEventListener("click", (ev) => {
         console.log("[v0] Click detectado na tabela", ev.target)
 
@@ -1880,7 +1883,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       wireButtons()
       wireForm()
       wireTableClicks()
-      wirePagamentosTableClicks()
+      wirePagamentosTableClicks() // Garantir que seja chamado no init
       wirePagamentoInputs()
       wirePagamentoButtons()
       wirePagamentoForm()
