@@ -798,6 +798,7 @@ function normalizeProjectInput(body = {}) {
     vigenciaFim: normalizeDate(body.vigenciaFim ?? body.fim ?? body.dataFim ?? ""),
     descricao: toStringSafe(body.descricao ?? body.desc ?? ""),
     gerente: toStringSafe(body.gerente ?? body.responsavel ?? ""),
+    emailGerente: toStringSafe(body.emailGerente ?? ""),
     instituicao: toStringSafe(body.instituicao ?? body.nomeInstituicao ?? ""),
     status: toStringSafe(body.status ?? ""),
     observacoes: toStringSafe(body.observacoes ?? body.obs ?? ""),
