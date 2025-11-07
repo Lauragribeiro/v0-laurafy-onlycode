@@ -1392,20 +1392,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
     const wirePagamentosTableClicks = () => {
       const tbody = document.getElementById("lista-pagamentos")
+      if (!tbody) return
 
-      if (!tbody) {
-        return
-      }
-
+      // Clonar tbody para remover todos os event listeners antigos
       const newTbody = tbody.cloneNode(true)
       tbody.parentNode.replaceChild(newTbody, tbody)
 
+      // Adicionar event listener no novo tbody
       newTbody.addEventListener("click", (ev) => {
         const rowEl = ev.target.closest("tr[data-key]")
-        if (!rowEl) {
-          return
-        }
+        if (!rowEl) return
+
         const { key } = rowEl.dataset
+        if (!key) return
+
         openPagamentoModal(key)
       })
     }
@@ -1608,112 +1608,109 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const wb = window.XLSX.utils.book_new()
       const ws_data = []
 
-      // Cabeçalho - linhas 0-4 (vazias para preenchimento manual)
-      ws_data.push([])
-      ws_data.push([])
-      ws_data.push([])
-      ws_data.push([])
-      ws_data.push([])
-      ws_data.push([]) // Linha vazia separadora
-      ws_data.push([]) // Linha 6 vazia
-      ws_data.push([]) // Linha 7 vazia
+      ws_data.push([]) // Linha 0
+      ws_data.push([]) // Linha 1
+      ws_data.push([]) // Linha 2
+      ws_data.push([]) // Linha 3
+      ws_data.push([]) // Linha 4
+      ws_data.push([]) // Linha 5
+      ws_data.push([]) // Linha 6
+      ws_data.push([]) // Linha 7
 
       ws_data.push(["", "CNPJ:", ""]) // Linha 8
       ws_data.push(["", "Termo de Parceria nº:", ""]) // Linha 9
       ws_data.push(["", "Projeto:", ""]) // Linha 10
       ws_data.push(["", "Prestação de Contas:", ""]) // Linha 11
-      ws_data.push([]) // Linha vazia
+      ws_data.push([]) // Linha 12 vazia
 
-      // Para cada bolsista, criar um quadro
       bolsistasFiltrados.forEach((row, index) => {
         const key = `${row.id}_${periodoFiltro}`
         const pagamento = pagamentos.find((p) => p.key === key) || {}
-
         const valorBolsa = parseMoney(pagamento.valor_bolsa) || row.valor || 0
 
-        // Linha 1: Natureza de Dispêndio (B-D) e Recursos humanos diretos e indiretos (E-M)
+        // Linha 1: Cabeçalhos principais
         ws_data.push([
           "", // A
           "Natureza de Dispêndio", // B
           "", // C
           "", // D
           "Recursos humanos diretos e indiretos", // E
-          "", // F
-          "", // G
-          "", // H
-          "", // I
-          "", // J
-          "", // K
-          "", // L
-          "", // M
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "", // F-M
         ])
 
-        // Linha 2: Favorecido (B-D), CPF (E-H), Nº extrato (I-M)
+        // Linha 2: Subcabeçalhos
         ws_data.push([
           "", // A
           "Favorecido", // B
-          "", // C
-          "", // D
+          "",
+          "", // C-D
           "CPF", // E
-          "", // F
-          "", // G
-          "", // H
+          "",
+          "",
+          "", // F-H
           "Nº extrato", // I
-          "", // J
-          "", // K
-          "", // L
-          "", // M
+          "",
+          "",
+          "",
+          "", // J-M
         ])
 
         // Linha 3: Dados do bolsista
         ws_data.push([
           "", // A
           row.nome || "", // B
-          "", // C
-          "", // D
+          "",
+          "", // C-D
           formatCPF(row.cpf), // E
-          "", // F
-          "", // G
-          "", // H
+          "",
+          "",
+          "", // F-H
           pagamento.num_extrato || "", // I
-          "", // J
-          "", // K
-          "", // L
-          "", // M
+          "",
+          "",
+          "",
+          "", // J-M
         ])
 
-        // Linha 4: NF/ND (B-D), Data de emissão (E-F), Data do pagamento (G-I), Rendimentos (J-M)
+        // Linha 4: Subcabeçalhos inferiores
         ws_data.push([
           "", // A
           "NF/ND", // B
-          "", // C
-          "", // D
+          "",
+          "", // C-D
           "Data de emissão da NF/ND", // E
           "", // F
           "Data do pagamento", // G
-          "", // H
-          "", // I
+          "",
+          "", // H-I
           "Rendimentos", // J
-          "", // K
-          "", // L
-          "", // M
+          "",
+          "",
+          "", // K-M
         ])
 
         // Linha 5: Dados inferiores
         ws_data.push([
           "", // A
           pagamento.nf_nd || "", // B
-          "", // C
-          "", // D
+          "",
+          "", // C-D
           pagamento.data_emissao ? formatDateBR(pagamento.data_emissao) : "", // E
           "", // F
           pagamento.data_pagamento ? formatDateBR(pagamento.data_pagamento) : "", // G
-          "", // H
-          "", // I
+          "",
+          "", // H-I
           formatBRL(valorBolsa), // J
-          "", // K
-          "", // L
-          "", // M
+          "",
+          "",
+          "", // K-M
         ])
 
         // Linha vazia entre quadros
@@ -1722,60 +1719,61 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         }
       })
 
-      // Criar worksheet
       const ws = window.XLSX.utils.aoa_to_sheet(ws_data)
 
       ws["!gridlines"] = false
 
       ws["!cols"] = [
-        { wch: 3 }, // Coluna A (vazia)
-        { wch: 25 }, // Coluna B
-        { wch: 20 }, // Coluna C
-        { wch: 5 }, // Coluna D
-        { wch: 25 }, // Coluna E
-        { wch: 5 }, // Coluna F
-        { wch: 20 }, // Coluna G
-        { wch: 5 }, // Coluna H
-        { wch: 5 }, // Coluna I
-        { wch: 15 }, // Coluna J
-        { wch: 5 }, // Coluna K
-        { wch: 5 }, // Coluna L
-        { wch: 5 }, // Coluna M
+        { wch: 3 }, // A
+        { wch: 25 }, // B
+        { wch: 20 }, // C
+        { wch: 5 }, // D
+        { wch: 25 }, // E
+        { wch: 5 }, // F
+        { wch: 20 }, // G
+        { wch: 5 }, // H
+        { wch: 5 }, // I
+        { wch: 15 }, // J
+        { wch: 5 }, // K
+        { wch: 5 }, // L
+        { wch: 5 }, // M
       ]
 
       const merges = []
 
+      // Cabeçalho (linhas 8-11): mesclar B-C
       merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ
       merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria
       merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto
       merges.push({ s: { r: 11, c: 1 }, e: { r: 11, c: 2 } }) // Prestação de Contas
 
-      let currentRow = 13 // Começa após o cabeçalho e linha vazia
+      // Quadros dos bolsistas (começam na linha 13)
+      let currentRow = 13
       bolsistasFiltrados.forEach((row, index) => {
-        // Linha 1: Mesclar "Natureza de Dispêndio" (B-D) e "Recursos humanos diretos e indiretos" (E-M)
-        merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 3 } }) // B-D
-        merges.push({ s: { r: currentRow, c: 4 }, e: { r: currentRow, c: 12 } }) // E-M
+        // Linha 1: Mesclar cabeçalhos
+        merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 3 } }) // Natureza de Dispêndio (B-D)
+        merges.push({ s: { r: currentRow, c: 4 }, e: { r: currentRow, c: 12 } }) // Recursos humanos (E-M)
 
-        // Linha 2: Mesclar "Favorecido" (B-D), "CPF" (E-H), "Nº extrato" (I-M)
-        merges.push({ s: { r: currentRow + 1, c: 1 }, e: { r: currentRow + 1, c: 3 } }) // B-D
-        merges.push({ s: { r: currentRow + 1, c: 4 }, e: { r: currentRow + 1, c: 7 } }) // E-H
-        merges.push({ s: { r: currentRow + 1, c: 8 }, e: { r: currentRow + 1, c: 12 } }) // I-M
+        // Linha 2: Mesclar subcabeçalhos
+        merges.push({ s: { r: currentRow + 1, c: 1 }, e: { r: currentRow + 1, c: 3 } }) // Favorecido (B-D)
+        merges.push({ s: { r: currentRow + 1, c: 4 }, e: { r: currentRow + 1, c: 7 } }) // CPF (E-H)
+        merges.push({ s: { r: currentRow + 1, c: 8 }, e: { r: currentRow + 1, c: 12 } }) // Nº extrato (I-M)
 
-        // Linha 3: Mesclar dados do bolsista
+        // Linha 3: Mesclar dados
         merges.push({ s: { r: currentRow + 2, c: 1 }, e: { r: currentRow + 2, c: 3 } }) // Nome (B-D)
         merges.push({ s: { r: currentRow + 2, c: 4 }, e: { r: currentRow + 2, c: 7 } }) // CPF (E-H)
         merges.push({ s: { r: currentRow + 2, c: 8 }, e: { r: currentRow + 2, c: 12 } }) // Nº extrato (I-M)
 
-        // Linha 4: Mesclar "NF/ND" (B-D), "Data de emissão" (E-F), "Data do pagamento" (G-I), "Rendimentos" (J-M)
-        merges.push({ s: { r: currentRow + 3, c: 1 }, e: { r: currentRow + 3, c: 3 } }) // B-D
-        merges.push({ s: { r: currentRow + 3, c: 4 }, e: { r: currentRow + 3, c: 5 } }) // E-F
-        merges.push({ s: { r: currentRow + 3, c: 6 }, e: { r: currentRow + 3, c: 8 } }) // G-I
-        merges.push({ s: { r: currentRow + 3, c: 9 }, e: { r: currentRow + 3, c: 12 } }) // J-M
+        // Linha 4: Mesclar subcabeçalhos inferiores
+        merges.push({ s: { r: currentRow + 3, c: 1 }, e: { r: currentRow + 3, c: 3 } }) // NF/ND (B-D)
+        merges.push({ s: { r: currentRow + 3, c: 4 }, e: { r: currentRow + 3, c: 5 } }) // Data emissão (E-F)
+        merges.push({ s: { r: currentRow + 3, c: 6 }, e: { r: currentRow + 3, c: 8 } }) // Data pagamento (G-I)
+        merges.push({ s: { r: currentRow + 3, c: 9 }, e: { r: currentRow + 3, c: 12 } }) // Rendimentos (J-M)
 
         // Linha 5: Mesclar dados inferiores
-        merges.push({ s: { r: currentRow + 4, c: 1 }, e: { r: currentRow + 4, c: 3 } }) // NF/ND (B-D)
-        merges.push({ s: { r: currentRow + 4, c: 4 }, e: { r: currentRow + 4, c: 5 } }) // Data emissão (E-F)
-        merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 8 } }) // Data pagamento (G-I)
+        merges.push({ s: { r: currentRow + 4, c: 1 }, e: { r: currentRow + 4, c: 3 } }) // NF/ND valor (B-D)
+        merges.push({ s: { r: currentRow + 4, c: 4 }, e: { r: currentRow + 4, c: 5 } }) // Data emissão valor (E-F)
+        merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 8 } }) // Data pagamento valor (G-I)
         merges.push({ s: { r: currentRow + 4, c: 9 }, e: { r: currentRow + 4, c: 12 } }) // Valor (J-M)
 
         currentRow += 5 // Próximo quadro (5 linhas)
@@ -1787,6 +1785,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       ws["!merges"] = merges
 
       const range = window.XLSX.utils.decode_range(ws["!ref"])
+
       for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const cell_address = { c: C, r: R }
@@ -1814,7 +1813,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           }
 
           if (R >= 13 && C >= 1 && C <= 12) {
-            const baseStyle = {
+            const rowInQuadro = (R - 13) % 6
+            const isHeaderRow = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
+
+            const borderStyle = {
               border: {
                 top: { style: "thin", color: { rgb: "000000" } },
                 bottom: { style: "thin", color: { rgb: "000000" } },
@@ -1827,12 +1829,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
               },
             }
 
-            const rowInQuadro = (R - 13) % 6
-            const isHeader = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
-
-            if (isHeader) {
+            if (isHeaderRow) {
               ws[cell_ref].s = {
-                ...baseStyle,
+                ...borderStyle,
                 fill: {
                   fgColor: { rgb: "D3D3D3" },
                 },
@@ -1842,22 +1841,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
                 },
               }
             } else {
-              // Células de dados: sem fundo, sem negrito
-              ws[cell_ref].s = baseStyle
+              ws[cell_ref].s = borderStyle
             }
           }
         }
       }
 
-      // Adicionar worksheet ao workbook
       window.XLSX.utils.book_append_sheet(wb, ws, "Folha de Rosto")
 
-      // Gerar nome do arquivo
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 16).replace("T", "_").replace(/:/g, "-")
       const filename = `folha_de_rosto_${periodoFiltro.replace("/", "-")}_${timestamp}.xlsx`
 
-      // Baixar arquivo
       window.XLSX.writeFile(wb, filename)
     }
 
