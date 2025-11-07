@@ -1344,6 +1344,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (!periodoFiltro) {
         tbody.innerHTML =
           '<tr class="table-empty"><td colspan="16">Selecione um período para visualizar os pagamentos.</td></tr>'
+        wirePagamentosTableClicks()
         return
       }
 
@@ -1358,6 +1359,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       if (bolsistasFiltrados.length === 0) {
         tbody.innerHTML = '<tr class="table-empty"><td colspan="16">Nenhum bolsista vinculado a este período.</td></tr>'
+        wirePagamentosTableClicks()
         return
       }
 
@@ -1402,20 +1404,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const wirePagamentosTableClicks = () => {
-      const table = document.getElementById("tbl-pagamentos")
-      if (!table) {
-        console.log("[v0] Tabela tbl-pagamentos não encontrada")
+      console.log("[v0] wirePagamentosTableClicks iniciado")
+
+      const tbody = document.getElementById("lista-pagamentos")
+      if (!tbody) {
+        console.log("[v0] tbody lista-pagamentos não encontrado")
         return
       }
 
-      // Remove event listeners antigos
-      const newTable = table.cloneNode(true)
-      table.parentNode.replaceChild(newTable, table)
+      const newTbody = tbody.cloneNode(true)
+      tbody.parentNode.replaceChild(newTbody, tbody)
 
-      const finalTable = document.getElementById("tbl-pagamentos")
+      const finalTbody = document.getElementById("lista-pagamentos")
 
-      finalTable.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado na tabela", ev.target)
+      finalTbody.addEventListener("click", (ev) => {
+        console.log("[v0] Click detectado no tbody", ev.target)
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
@@ -1434,7 +1437,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         openPagamentoModal(key)
       })
 
-      console.log("[v0] Event listener registrado na tabela")
+      console.log("[v0] Event listener registrado no tbody")
     }
 
     const openPagamentoModal = (key) => {
@@ -1648,19 +1651,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const wb = window.XLSX.utils.book_new()
       const ws_data = []
 
-      // Linhas vazias no topo (linhas 1-8)
       for (let i = 0; i < 8; i++) {
-        ws_data.push([""])
+        ws_data.push([])
       }
 
-      // Cabeçalho do documento (linhas 9-12)
       ws_data.push(["", "CNPJ:", ""])
       ws_data.push(["", "Termo de Parceria nº:", ""])
       ws_data.push(["", "Projeto:", ""])
       ws_data.push(["", "Prestação de Contas:", ""])
       ws_data.push([""]) // Linha vazia após cabeçalho
 
-      // Dados dos bolsistas
       bolsistasFiltrados.forEach((row, index) => {
         const key = `${row.id}_${periodoFiltro}`
         const pagamento = pagamentos.find((p) => p.key === key) || {}
@@ -1739,7 +1739,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
         // Linha vazia entre quadros
         if (index < bolsistasFiltrados.length - 1) {
-          ws_data.push([""])
+          ws_data.push([])
         }
       })
 
@@ -1747,7 +1747,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       ws["!views"] = [{ showGridLines: false }]
 
-      // Largura das colunas
       ws["!cols"] = [
         { wch: 3 }, // A
         { wch: 25 }, // B
@@ -1766,36 +1765,34 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const merges = []
 
-      // Cabeçalho do documento (linhas 9-12)
       merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ
       merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria
       merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto
       merges.push({ s: { r: 11, c: 1 }, e: { r: 11, c: 2 } }) // Prestação de Contas
 
-      // Quadros dos bolsistas
       let currentRow = 13
       bolsistasFiltrados.forEach((row, index) => {
-        // Linha 1
+        // Linha 1: Natureza B:D, Recursos E:M
         merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 3 } })
         merges.push({ s: { r: currentRow, c: 4 }, e: { r: currentRow, c: 12 } })
 
-        // Linha 2
+        // Linha 2: Favorecido B:D, CPF E:H, Nº extrato I:M
         merges.push({ s: { r: currentRow + 1, c: 1 }, e: { r: currentRow + 1, c: 3 } })
         merges.push({ s: { r: currentRow + 1, c: 4 }, e: { r: currentRow + 1, c: 7 } })
         merges.push({ s: { r: currentRow + 1, c: 8 }, e: { r: currentRow + 1, c: 12 } })
 
-        // Linha 3
+        // Linha 3: Nome B:D, CPF E:H, Extrato I:M
         merges.push({ s: { r: currentRow + 2, c: 1 }, e: { r: currentRow + 2, c: 3 } })
         merges.push({ s: { r: currentRow + 2, c: 4 }, e: { r: currentRow + 2, c: 7 } })
         merges.push({ s: { r: currentRow + 2, c: 8 }, e: { r: currentRow + 2, c: 12 } })
 
-        // Linha 4
+        // Linha 4: NF/ND B:D, Data emissão E:F, Data pagamento G:I, Rendimentos J:M
         merges.push({ s: { r: currentRow + 3, c: 1 }, e: { r: currentRow + 3, c: 3 } })
         merges.push({ s: { r: currentRow + 3, c: 4 }, e: { r: currentRow + 3, c: 5 } })
         merges.push({ s: { r: currentRow + 3, c: 6 }, e: { r: currentRow + 3, c: 8 } })
         merges.push({ s: { r: currentRow + 3, c: 9 }, e: { r: currentRow + 3, c: 12 } })
 
-        // Linha 5
+        // Linha 5: Valores
         merges.push({ s: { r: currentRow + 4, c: 1 }, e: { r: currentRow + 4, c: 3 } })
         merges.push({ s: { r: currentRow + 4, c: 4 }, e: { r: currentRow + 4, c: 5 } })
         merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 8 } })
@@ -1823,7 +1820,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             ws[cell_ref] = { t: "s", v: "" }
           }
 
-          // Cabeçalho do documento (linhas 9-12, colunas B-C)
           if (R >= 8 && R <= 11 && C >= 1 && C <= 2) {
             ws[cell_ref].s = {
               font: { name: "Arial", sz: 12, bold: true },
@@ -1832,12 +1828,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             }
           }
 
-          // Quadros de bolsistas (linha 14+, colunas B-M)
           if (R >= 13 && C >= 1 && C <= 12) {
             const rowInQuadro = (R - 13) % 6
             const isHeaderRow = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
 
             if (isHeaderRow) {
+              // Cabeçalhos com fundo cinza e texto cinza escuro em negrito
               ws[cell_ref].s = {
                 fill: { fgColor: { rgb: "D3D3D3" } },
                 font: { bold: true, color: { rgb: "666666" } },
@@ -1845,6 +1841,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
                 border: borderStyle,
               }
             } else if (rowInQuadro === 2 || rowInQuadro === 4) {
+              // Dados sem fundo mas com bordas
               ws[cell_ref].s = {
                 alignment: { vertical: "center", horizontal: "center" },
                 border: borderStyle,
