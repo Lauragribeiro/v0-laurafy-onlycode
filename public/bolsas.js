@@ -1420,17 +1420,23 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         return
       }
 
+      // Clonar o tbody para remover event listeners antigos
       const newTbody = tbody.cloneNode(true)
       tbody.parentNode.replaceChild(newTbody, tbody)
 
       const finalTbody = document.getElementById("lista-pagamentos")
 
+      console.log(
+        "[v0] Registrando event listener. Linhas na tabela:",
+        finalTbody.querySelectorAll("tr[data-key]").length,
+      )
+
       finalTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado no tbody", ev.target)
+        console.log("[v0] Click detectado. Target:", ev.target.tagName, ev.target.textContent.substring(0, 30))
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
-          console.log("[v0] Nenhuma linha com data-key encontrada")
+          console.log("[v0] Nenhuma linha com data-key encontrada no closest")
           return
         }
 
@@ -1442,10 +1448,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           return
         }
 
+        console.log("[v0] Chamando openPagamentoModal com key:", key)
         openPagamentoModal(key)
       })
 
-      console.log("[v0] Event listener registrado no tbody")
+      console.log("[v0] Event listener registrado com sucesso no tbody")
     }
 
     const openPagamentoModal = (key) => {
