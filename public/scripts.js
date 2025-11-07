@@ -88,6 +88,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Se não existe a grid, estamos em outra página — não roda a parte de projetos
   if (!grid) return
 
+  const auth = getAuth()
+  const tipoAcesso = auth?.tipoAcesso || "ADMIN"
+  const emailUsuario = auth?.email || ""
+
+  if (tipoAcesso === "GERENTE" && btnOpen) {
+    btnOpen.style.display = "none"
+  }
+
   // ---- estado ----
   let all = []
   let filter = "all"
@@ -180,6 +188,18 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!r.ok) throw new Error("Falha ao carregar projetos")
       const j = await r.json()
       all = j?.data || []
+
+      if (tipoAcesso === "GERENTE") {
+        all = all.filter((p) => {
+          const gerente = (p.gerente || "").trim().toLowerCase()
+          const responsavel = (p.responsavel || "").trim().toLowerCase()
+          const email = emailUsuario.toLowerCase()
+
+          // Mostrar apenas projetos onde o email do gerente corresponde ao usuário logado
+          return gerente.includes(email) || responsavel.includes(email) || gerente === email || responsavel === email
+        })
+      }
+
       render()
     } catch (e) {
       console.error(e)

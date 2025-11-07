@@ -27,6 +27,7 @@
       <div class="subnav-title">Prestação de Contas</div>
       <nav class="tabs" id="prest-tabs">
         <a class="tab active" id="tab-evidencias" href="#">Evidências</a>
+        <!-- Abas serão ocultadas via JavaScript para Gerente -->
         <a class="tab" id="tab-docfin" href="#">Documentação financeira</a>
         <a class="tab" id="tab-bolsas" href="#">Gerenciamento de Bolsas</a>
       </nav>
@@ -50,13 +51,11 @@
       <div class="form-row">
         <label class="field">
           <span>Cronograma de execução — Início</span>
-          <!-- Remover readonly para tornar editável -->
           <input id="cron-inicio" type="date" />
         </label>
 
         <label class="field">
           <span>Cronograma de execução — Fim</span>
-          <!-- Remover readonly para tornar editável -->
           <input id="cron-fim" type="date" />
         </label>
 
@@ -90,8 +89,8 @@
               <th>Upload de evidência</th>
               <th>Status</th>
               <th>Ações</th>
-              <!-- Adicionar coluna Notificar o Gerente -->
-              <th>Notificar o Gerente</th>
+              <!-- Texto será ajustado via JavaScript -->
+              <th id="th-notificar">Notificar o Gerente</th>
             </tr>
           </thead>
           <tbody><!-- linhas via JS --></tbody>

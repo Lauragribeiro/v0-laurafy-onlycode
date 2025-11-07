@@ -163,9 +163,20 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderTable() {
+    const thead = document.querySelector("#tbl-evidencias thead")
+    if (thead && tipoAcesso === "GERENTE") {
+      const lastTh = thead.querySelector("th:last-child")
+      if (lastTh && lastTh.textContent.includes("Notificar o Gerente")) {
+        lastTh.textContent = "Notificar a Conformidade a entrega"
+      }
+    }
+
     tbody.innerHTML = rows
-      .map(
-        (r, i) => `
+      .map((r, i) => {
+        const acaoDisabled = tipoAcesso === "GERENTE" ? "disabled" : ""
+        const notificarLabel = tipoAcesso === "GERENTE" ? "Notificar Conformidade" : "Notificar"
+
+        return `
       <tr>
         <td>${escapeHtml(r.etapa || "")}</td>
         <td>${escapeHtml(r.nome || "")}</td>
@@ -186,23 +197,22 @@ document.addEventListener("DOMContentLoaded", () => {
           </select>
         </td>
         <td>
-          <select class="chip-select action" data-row="${i}">
+          <select class="chip-select action" data-row="${i}" ${acaoDisabled}>
             ${option("Enviada para o gerente de projeto", r.acao)}
             ${option("Aceita", r.acao)}
             ${option("Em análise", r.acao)}
           </select>
         </td>
         <td>
-          <button class="btn btn-sm btn-primary notificar-gerente" data-row="${i}" title="Notificar o Gerente">
-            Notificar
+          <button class="btn btn-sm btn-primary notificar-gerente" data-row="${i}" title="${notificarLabel}">
+            ${notificarLabel}
           </button>
         </td>
       </tr>
-    `,
-      )
+    `
+      })
       .join("")
 
-    // binds
     $$(".chip-select.status").forEach((el) =>
       el.addEventListener("change", (e) => {
         const idx = +e.target.dataset.row
@@ -212,6 +222,10 @@ document.addEventListener("DOMContentLoaded", () => {
     )
     $$(".chip-select.action").forEach((el) =>
       el.addEventListener("change", (e) => {
+        if (tipoAcesso === "GERENTE") {
+          e.preventDefault()
+          return
+        }
         const idx = +e.target.dataset.row
         rows[idx].acao = e.target.value
         saveLS()
@@ -234,9 +248,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const idx = +e.target.dataset.row
         const evidencia = rows[idx]
 
-        if (!project?.responsavel) {
-          alert("Gerente de projeto não identificado.")
-          return
+        let destinatario, assunto
+        if (tipoAcesso === "GERENTE") {
+          destinatario = "conformidade@edge.local" // Email da conformidade
+          assunto = "Notificação de Conformidade de Entrega"
+        } else {
+          if (!project?.responsavel) {
+            alert("Gerente de projeto não identificado.")
+            return
+          }
+          destinatario = project.responsavel
+          assunto = "Notificação de Evidência Pendente"
         }
 
         const etapa = evidencia.etapa || "N/A"
@@ -250,11 +272,12 @@ document.addEventListener("DOMContentLoaded", () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              gerenteEmail: project.responsavel,
+              gerenteEmail: destinatario,
               etapa,
               nomeEvidencia: nome,
               dataVencimento,
               mensagem,
+              assunto,
             }),
           })
 
@@ -264,7 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
             alert("Erro ao enviar notificação. Tente novamente.")
           }
         } catch (error) {
-          console.error("Erro ao notificar gerente:", error)
+          console.error("Erro ao notificar:", error)
           alert("Erro ao enviar notificação. Verifique sua conexão.")
         }
       }),
@@ -323,7 +346,6 @@ document.addEventListener("DOMContentLoaded", () => {
   cronInicio?.addEventListener("change", saveCronogramaChanges)
   cronFim?.addEventListener("change", saveCronogramaChanges)
 
-  // Upload do cronograma
   const XLSX = window.XLSX // Declare XLSX variable
   inputCron?.addEventListener("change", async (ev) => {
     const file = ev.target.files?.[0]
@@ -342,7 +364,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const headers = Object.keys(json[0])
 
-      // “Mês 1 … Mês 12”
       const mesNCols = headers
         .filter((h) => /^m[eê]s\s*\d{1,2}$/i.test(String(h).trim()))
         .sort((a, b) => (Number.parseInt(a.replace(/\D/g, "")) || 0) - (Number.parseInt(b.replace(/\D/g, "")) || 0))
@@ -391,7 +412,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return
       }
 
-      // Formato com coluna “Mês”
       let nomeKey = null,
         mesKey = null,
         etapaKey = null
@@ -447,13 +467,32 @@ document.addEventListener("DOMContentLoaded", () => {
       tabEvid.href = `/prestacao.html${qs}`
       tabEvid.classList.add("active")
     }
-    if (tabDoc) {
-      tabDoc.href = `/docfin.html${qs}`
-    }
-    if (tabBolsas) {
-      tabBolsas.href = `/bolsas.html${qs}`
+
+    if (tipoAcesso === "GERENTE") {
+      if (tabDoc) {
+        tabDoc.style.display = "none"
+      }
+      if (tabBolsas) {
+        tabBolsas.style.display = "none"
+      }
+    } else {
+      if (tabDoc) {
+        tabDoc.href = `/docfin.html${qs}`
+      }
+      if (tabBolsas) {
+        tabBolsas.href = `/bolsas.html${qs}`
+      }
     }
   }
+
+  const auth = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("edge.auth") || "null")
+    } catch {
+      return null
+    }
+  })()
+  const tipoAcesso = auth?.tipoAcesso || "ADMIN"
   ;(async () => {
     wireTabs()
     loadLS()
