@@ -1391,27 +1391,25 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const wirePagamentosTableClicks = () => {
-      console.log("[v0] wirePagamentosTableClicks chamado")
-
-      const tbody = document.getElementById("lista-pagamentos")
-      if (!tbody) {
-        console.log("[v0] tbody lista-pagamentos não encontrado")
+      const table = document.getElementById("tbl-pagamentos")
+      if (!table) {
+        console.log("[v0] Tabela tbl-pagamentos não encontrada")
         return
       }
 
-      const newTbody = tbody.cloneNode(true)
-      tbody.parentNode.replaceChild(newTbody, tbody)
+      // Remove event listeners antigos
+      // const newTable = table.cloneNode(true) // REMOVED: Clonagem desnecessária com event delegation
+      // table.parentNode.replaceChild(newTable, table) // REMOVED: Substituição desnecessária
 
-      const finalTbody = document.getElementById("lista-pagamentos")
-      if (!finalTbody) {
-        console.log("[v0] finalTbody não encontrado após clonagem")
+      const finalTable = document.getElementById("tbl-pagamentos") // Get the original table element again
+      if (!finalTable) {
+        console.log("[v0] finalTable não encontrado") // Should not happen if 'table' was found
         return
       }
 
-      console.log("[v0] Adicionando event listener ao tbody")
-
-      finalTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado no tbody", ev.target)
+      // Event delegation na tabela inteira
+      finalTable.addEventListener("click", (ev) => {
+        console.log("[v0] Click detectado na tabela", ev.target)
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
@@ -1642,16 +1640,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const wb = window.XLSX.utils.book_new()
       const ws_data = []
 
+      // Linhas vazias no topo
       for (let i = 0; i < 8; i++) {
         ws_data.push([""])
       }
 
+      // Cabeçalho do documento (linhas 9-12)
       ws_data.push(["", "CNPJ:", ""])
       ws_data.push(["", "Termo de Parceria nº:", ""])
       ws_data.push(["", "Projeto:", ""])
       ws_data.push(["", "Prestação de Contas:", ""])
       ws_data.push([""]) // Linha vazia após cabeçalho
 
+      // Dados dos bolsistas
       bolsistasFiltrados.forEach((row, index) => {
         const key = `${row.id}_${periodoFiltro}`
         const pagamento = pagamentos.find((p) => p.key === key) || {}
@@ -1677,7 +1678,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         // Linha 2: Favorecido | CPF | Nº extrato
         ws_data.push(["", "Favorecido", "", "", "CPF", "", "", "", "Nº extrato", "", "", "", ""])
 
-        // Linha 3: Valores (Nome, CPF, Nº extrato)
+        // Linha 3: Valores
         ws_data.push([
           "",
           row.nome || "",
@@ -1711,7 +1712,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           "",
         ])
 
-        // Linha 5: Valores (NF/ND, datas, valor)
+        // Linha 5: Valores
         ws_data.push([
           "",
           pagamento.nf_nd || "",
@@ -1728,7 +1729,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           "",
         ])
 
-        // Linha vazia entre quadros (exceto no último)
+        // Linha vazia entre quadros
         if (index < bolsistasFiltrados.length - 1) {
           ws_data.push([""])
         }
@@ -1736,8 +1737,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const ws = window.XLSX.utils.aoa_to_sheet(ws_data)
 
+      // Remover linhas de grade
       ws["!views"] = [{ showGridLines: false }]
 
+      // Largura das colunas
       ws["!cols"] = [
         { wch: 3 }, // A
         { wch: 25 }, // B
@@ -1754,57 +1757,55 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         { wch: 5 }, // M
       ]
 
+      // Células mescladas
       const merges = []
 
-      // Cabeçalho do documento (linhas 9-12, índices 8-11)
+      // Cabeçalho do documento
       merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ
       merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria
       merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto
       merges.push({ s: { r: 11, c: 1 }, e: { r: 11, c: 2 } }) // Prestação de Contas
 
-      // Quadros dos bolsistas começam na linha 14 (índice 13)
+      // Quadros dos bolsistas
       let currentRow = 13
       bolsistasFiltrados.forEach((row, index) => {
-        // Linha 1: Natureza (B-D) | Recursos humanos (E-M)
+        // Linha 1
         merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 3 } })
         merges.push({ s: { r: currentRow, c: 4 }, e: { r: currentRow, c: 12 } })
 
-        // Linha 2: Favorecido (B-D) | CPF (E-H) | Nº extrato (I-M)
+        // Linha 2
         merges.push({ s: { r: currentRow + 1, c: 1 }, e: { r: currentRow + 1, c: 3 } })
         merges.push({ s: { r: currentRow + 1, c: 4 }, e: { r: currentRow + 1, c: 7 } })
         merges.push({ s: { r: currentRow + 1, c: 8 }, e: { r: currentRow + 1, c: 12 } })
 
-        // Linha 3: Nome (B-D) | CPF valor (E-H) | Nº extrato valor (I-M)
+        // Linha 3
         merges.push({ s: { r: currentRow + 2, c: 1 }, e: { r: currentRow + 2, c: 3 } })
         merges.push({ s: { r: currentRow + 2, c: 4 }, e: { r: currentRow + 2, c: 7 } })
         merges.push({ s: { r: currentRow + 2, c: 8 }, e: { r: currentRow + 2, c: 12 } })
 
-        // Linha 4: NF/ND (B-D) | Data emissão (E-F) | Data pagamento (G-I) | Rendimentos (J-M)
+        // Linha 4
         merges.push({ s: { r: currentRow + 3, c: 1 }, e: { r: currentRow + 3, c: 3 } })
         merges.push({ s: { r: currentRow + 3, c: 4 }, e: { r: currentRow + 3, c: 5 } })
         merges.push({ s: { r: currentRow + 3, c: 6 }, e: { r: currentRow + 3, c: 8 } })
         merges.push({ s: { r: currentRow + 3, c: 9 }, e: { r: currentRow + 3, c: 12 } })
 
-        // Linha 5: NF/ND valor (B-D) | Data emissão valor (E-F) | Data pagamento valor (G-I) | Valor (J-M)
+        // Linha 5
         merges.push({ s: { r: currentRow + 4, c: 1 }, e: { r: currentRow + 4, c: 3 } })
         merges.push({ s: { r: currentRow + 4, c: 4 }, e: { r: currentRow + 4, c: 5 } })
         merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 8 } })
         merges.push({ s: { r: currentRow + 4, c: 9 }, e: { r: currentRow + 4, c: 12 } })
 
-        currentRow += 5
-        if (index < bolsistasFiltrados.length - 1) {
-          currentRow += 1 // Pular linha vazia entre quadros
-        }
+        currentRow += 6 // Pular 6 linhas (5 de dados + 1 linha vazia para o próximo quadro)
       })
 
       ws["!merges"] = merges
 
+      // Aplicar estilos
       const range = window.XLSX.utils.decode_range(ws["!ref"])
 
       for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {
-          const cell_address = { c: C, r: R }
-          const cell_ref = window.XLSX.utils.encode_cell(cell_address)
+          const cell_ref = window.XLSX.utils.encode_cell({ c: C, r: R })
 
           // Criar célula se não existir
           if (!ws[cell_ref]) {
@@ -1814,54 +1815,42 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           // Cabeçalho do documento (linhas 9-12, colunas B-C)
           if (R >= 8 && R <= 11 && C >= 1 && C <= 2) {
             ws[cell_ref].s = {
-              font: {
-                name: "Arial",
-                sz: 12,
-                bold: true,
-              },
-              alignment: {
-                vertical: "center",
-                horizontal: "left",
-              },
-              border: {
-                right: { style: "thin", color: { rgb: "000000" } },
-              },
+              font: { name: "Arial", sz: 12, bold: true },
+              alignment: { vertical: "center", horizontal: "left" },
+              border: { right: { style: "thin", color: { rgb: "000000" } } },
             }
           }
 
           // Quadros de bolsistas (linha 14+, colunas B-M)
           if (R >= 13 && C >= 1 && C <= 12) {
-            const rowInQuadro = (R - 13) % 6
+            const rowInQuadro = (R - 13) % 6 // Calcula a linha dentro de um quadro de 6 linhas
             const isHeaderRow = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
 
-            const borderStyle = {
-              border: {
-                top: { style: "thin", color: { rgb: "000000" } },
-                bottom: { style: "thin", color: { rgb: "000000" } },
-                left: { style: "thin", color: { rgb: "000000" } },
-                right: { style: "thin", color: { rgb: "000000" } },
-              },
-              alignment: {
-                vertical: "center",
-                horizontal: "center",
-              },
-            }
-
             if (isHeaderRow) {
-              // Cabeçalhos: cinza claro com texto escuro em negrito
+              // Cabeçalhos com fundo cinza e texto em negrito
               ws[cell_ref].s = {
-                ...borderStyle,
-                fill: {
-                  fgColor: { rgb: "D3D3D3" },
-                },
-                font: {
-                  bold: true,
-                  color: { rgb: "666666" },
+                fill: { fgColor: { rgb: "D3D3D3" } }, // Cinza claro
+                font: { bold: true, color: { rgb: "666666" } }, // Cinza escuro
+                alignment: { vertical: "center", horizontal: "center" },
+                border: {
+                  top: { style: "thin", color: { rgb: "000000" } },
+                  bottom: { style: "thin", color: { rgb: "000000" } },
+                  left: { style: "thin", color: { rgb: "000000" } },
+                  right: { style: "thin", color: { rgb: "000000" } },
                 },
               }
-            } else {
-              // Valores: sem fundo, com bordas
-              ws[cell_ref].s = borderStyle
+            } else if (rowInQuadro !== 5) {
+              // Não aplicar borda inferior à última linha de dados de cada quadro
+              // Valores com bordas
+              ws[cell_ref].s = {
+                alignment: { vertical: "center", horizontal: "center" },
+                border: {
+                  top: { style: "thin", color: { rgb: "000000" } },
+                  bottom: { style: "thin", color: { rgb: "000000" } },
+                  left: { style: "thin", color: { rgb: "000000" } },
+                  right: { style: "thin", color: { rgb: "000000" } },
+                },
+              }
             }
           }
         }
