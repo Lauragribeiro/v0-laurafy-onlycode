@@ -1402,23 +1402,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const wirePagamentosTableClicks = () => {
-      const tbody = document.getElementById("lista-pagamentos")
-      if (!tbody) {
-        console.log("[v0] tbody lista-pagamentos não encontrado em wirePagamentosTableClicks")
+      const table = document.getElementById("tbl-pagamentos")
+      if (!table) {
+        console.log("[v0] Tabela tbl-pagamentos não encontrada")
         return
       }
 
-      const newTbody = tbody.cloneNode(true)
-      tbody.parentNode.replaceChild(newTbody, tbody)
+      // Remove event listeners antigos
+      const newTable = table.cloneNode(true)
+      table.parentNode.replaceChild(newTable, table)
 
-      const finalTbody = document.getElementById("lista-pagamentos")
-      if (!finalTbody) {
-        console.log("[v0] finalTbody não encontrado após clonagem")
-        return
-      }
+      const finalTable = document.getElementById("tbl-pagamentos")
 
-      finalTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado", ev.target)
+      finalTable.addEventListener("click", (ev) => {
+        console.log("[v0] Click detectado na tabela", ev.target)
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
@@ -1437,7 +1434,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         openPagamentoModal(key)
       })
 
-      console.log("[v0] Event listener registrado com sucesso")
+      console.log("[v0] Event listener registrado na tabela")
     }
 
     const openPagamentoModal = (key) => {
@@ -1651,12 +1648,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const wb = window.XLSX.utils.book_new()
       const ws_data = []
 
-      // Linhas vazias no topo
+      // Linhas vazias no topo (linhas 1-8)
       for (let i = 0; i < 8; i++) {
         ws_data.push([""])
       }
 
-      // Cabeçalho do documento (linhas 9-12) - Vazias para preenchimento manual
+      // Cabeçalho do documento (linhas 9-12)
       ws_data.push(["", "CNPJ:", ""])
       ws_data.push(["", "Termo de Parceria nº:", ""])
       ws_data.push(["", "Projeto:", ""])
@@ -1769,7 +1766,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const merges = []
 
-      // Cabeçalho do documento
+      // Cabeçalho do documento (linhas 9-12)
       merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ
       merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria
       merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto
@@ -1841,7 +1838,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             const isHeaderRow = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
 
             if (isHeaderRow) {
-              // Cabeçalhos com fundo cinza e texto em negrito cinza escuro
               ws[cell_ref].s = {
                 fill: { fgColor: { rgb: "D3D3D3" } },
                 font: { bold: true, color: { rgb: "666666" } },
@@ -1849,7 +1845,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
                 border: borderStyle,
               }
             } else if (rowInQuadro === 2 || rowInQuadro === 4) {
-              // Linhas de valores com bordas
               ws[cell_ref].s = {
                 alignment: { vertical: "center", horizontal: "center" },
                 border: borderStyle,
