@@ -1298,6 +1298,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         renderTable()
         updateFiltroPeriodo()
         updateFiltroPeriodoPagamentos()
+        renderPagamentosTable() // Chamada adicionada para renderizar a tabela de pagamentos ao carregar o projeto
       } catch (err) {
         console.error("Falha ao carregar dados do projeto.", err)
         initTabs()
@@ -1306,6 +1307,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         renderTable()
         updateFiltroPeriodo()
         updateFiltroPeriodoPagamentos()
+        renderPagamentosTable() // Chamada adicionada para renderizar a tabela de pagamentos em caso de erro
       }
     }
 
@@ -1352,7 +1354,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (!periodoFiltro) {
         tbody.innerHTML =
           '<tr class="table-empty"><td colspan="16">Selecione um período para visualizar os pagamentos.</td></tr>'
-        wirePagamentosTableClicks()
         return
       }
 
@@ -1367,7 +1368,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       if (bolsistasFiltrados.length === 0) {
         tbody.innerHTML = '<tr class="table-empty"><td colspan="16">Nenhum bolsista vinculado a este período.</td></tr>'
-        wirePagamentosTableClicks()
         return
       }
 
@@ -1414,22 +1414,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const wirePagamentosTableClicks = () => {
       console.log("[v0] wirePagamentosTableClicks iniciado")
 
-      const table = document.getElementById("tbl-pagamentos")
-      if (!table) {
-        console.log("[v0] Tabela tbl-pagamentos não encontrada")
+      const tbody = document.getElementById("lista-pagamentos")
+      if (!tbody) {
+        console.log("[v0] tbody lista-pagamentos não encontrado")
         return
       }
 
-      // Clone a tabela inteira para remover todos os event listeners
-      const newTable = table.cloneNode(true)
-      table.parentNode.replaceChild(newTable, table)
+      const newTbody = tbody.cloneNode(true)
+      tbody.parentNode.replaceChild(newTbody, tbody)
 
-      // Obter referência atualizada da tabela
-      const finalTable = document.getElementById("tbl-pagamentos")
+      const finalTbody = document.getElementById("lista-pagamentos")
 
-      // Registrar event listener na tabela (event delegation)
-      finalTable.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado na tabela", ev.target)
+      finalTbody.addEventListener("click", (ev) => {
+        console.log("[v0] Click detectado no tbody", ev.target)
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
@@ -1448,7 +1445,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         openPagamentoModal(key)
       })
 
-      console.log("[v0] Event listener registrado na tabela")
+      console.log("[v0] Event listener registrado no tbody")
     }
 
     const openPagamentoModal = (key) => {
@@ -1883,7 +1880,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       wireButtons()
       wireForm()
       wireTableClicks()
-      wirePagamentosTableClicks()
       wirePagamentoInputs()
       wirePagamentoButtons()
       wirePagamentoForm()
