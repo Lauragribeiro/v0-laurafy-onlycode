@@ -694,7 +694,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       try {
         const raw = localStorage.getItem(pagamentosStorageKey())
         if (raw) {
-          const parsed = JSON.parse(raw)
+          const parsed = JSON.JSON.parse(raw)
           if (Array.isArray(parsed)) {
             pagamentos = parsed
           }
@@ -1338,6 +1338,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (!periodoFiltro) {
         tbody.innerHTML =
           '<tr class="table-empty"><td colspan="16">Selecione um período para visualizar os pagamentos.</td></tr>'
+        wirePagamentosTableClicks()
         return
       }
 
@@ -1348,6 +1349,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       if (bolsistasFiltrados.length === 0) {
         tbody.innerHTML = '<tr class="table-empty"><td colspan="16">Nenhum bolsista vinculado a este período.</td></tr>'
+        wirePagamentosTableClicks()
         return
       }
 
@@ -1392,22 +1394,37 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
     const wirePagamentosTableClicks = () => {
       const tbody = document.getElementById("lista-pagamentos")
-      if (!tbody) return
+      if (!tbody) {
+        console.log("[v0] tbody lista-pagamentos não encontrado")
+        return
+      }
 
-      // Clonar tbody para remover todos os event listeners antigos
       const newTbody = tbody.cloneNode(true)
       tbody.parentNode.replaceChild(newTbody, tbody)
 
-      // Adicionar event listener no novo tbody
-      newTbody.addEventListener("click", (ev) => {
+      const finalTbody = document.getElementById("lista-pagamentos")
+      if (!finalTbody) return
+
+      finalTbody.addEventListener("click", (ev) => {
+        console.log("[v0] Click detectado na tabela de pagamentos")
+
         const rowEl = ev.target.closest("tr[data-key]")
-        if (!rowEl) return
+        if (!rowEl) {
+          console.log("[v0] Nenhuma linha com data-key encontrada")
+          return
+        }
 
         const { key } = rowEl.dataset
-        if (!key) return
+        if (!key) {
+          console.log("[v0] Nenhuma key encontrada no dataset")
+          return
+        }
 
+        console.log("[v0] Abrindo modal para key:", key)
         openPagamentoModal(key)
       })
+
+      console.log("[v0] Event listener registrado no tbody de pagamentos")
     }
 
     const openPagamentoModal = (key) => {
@@ -1721,7 +1738,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const ws = window.XLSX.utils.aoa_to_sheet(ws_data)
 
-      ws["!gridlines"] = false
+      ws["!views"] = [{ showGridLines: false }]
 
       ws["!cols"] = [
         { wch: 3 }, // A
@@ -1741,13 +1758,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const merges = []
 
-      // Cabeçalho (linhas 8-11): mesclar B-C
       merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ
       merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria
       merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto
       merges.push({ s: { r: 11, c: 1 }, e: { r: 11, c: 2 } }) // Prestação de Contas
 
-      // Quadros dos bolsistas (começam na linha 13)
       let currentRow = 13
       bolsistasFiltrados.forEach((row, index) => {
         // Linha 1: Mesclar cabeçalhos
@@ -1816,6 +1831,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             const rowInQuadro = (R - 13) % 6
             const isHeaderRow = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
 
+            // Bordas em todas as células
             const borderStyle = {
               border: {
                 top: { style: "thin", color: { rgb: "000000" } },
