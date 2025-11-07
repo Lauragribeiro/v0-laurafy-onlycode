@@ -1469,15 +1469,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       console.log("[v0] Modal encontrado:", modal)
 
-      const [bolsistaId, periodo] = key.split("_")
-      console.log("[v0] bolsistaId:", bolsistaId, "periodo:", periodo)
-      console.log("[v0] Total de bolsistas no array:", bolsistas.length)
-      console.log(
-        "[v0] IDs dos bolsistas:",
-        bolsistas.map((b) => ({ id: b.id, nome: b.nome })),
-      )
+      const [bolsistaIdRaw, periodo] = key.split("_")
+      // Extrair apenas a parte numérica do ID
+      const bolsistaId = bolsistaIdRaw.includes("_") ? bolsistaIdRaw.split("_")[0] : bolsistaIdRaw
 
-      const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
+      console.log("[v0] bolsistaId extraído:", bolsistaId, "periodo:", periodo)
+      console.log("[v0] Total de bolsistas no array:", bolsistas.length)
+
+      const bolsista = bolsistas.find((b) => {
+        const bId = String(b.id).includes("_") ? String(b.id).split("_")[0] : String(b.id)
+        return bId === String(bolsistaId)
+      })
+
       if (!bolsista) {
         console.error("[v0] Bolsista não encontrado para ID:", bolsistaId)
         console.error("[v0] Bolsistas disponíveis:", bolsistas.map((b) => `${b.id}: ${b.nome}`).join(", "))
@@ -1520,7 +1523,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       calcularTotalPagamento()
 
       console.log("[v0] Tentando abrir modal...")
-      console.log("[v0] modal.showModal disponível?", typeof modal.showModal)
 
       try {
         if (typeof modal.showModal === "function") {
