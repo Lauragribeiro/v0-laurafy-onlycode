@@ -1471,10 +1471,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const [bolsistaId, periodo] = key.split("_")
       console.log("[v0] bolsistaId:", bolsistaId, "periodo:", periodo)
+      console.log("[v0] Total de bolsistas no array:", bolsistas.length)
+      console.log(
+        "[v0] IDs dos bolsistas:",
+        bolsistas.map((b) => ({ id: b.id, nome: b.nome })),
+      )
 
       const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
       if (!bolsista) {
         console.error("[v0] Bolsista não encontrado para ID:", bolsistaId)
+        console.error("[v0] Bolsistas disponíveis:", bolsistas.map((b) => `${b.id}: ${b.nome}`).join(", "))
         alert("Bolsista não encontrado.")
         return
       }
