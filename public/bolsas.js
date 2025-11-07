@@ -1641,68 +1641,89 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
         const valorBolsa = parseMoney(pagamento.valor_bolsa) || row.valor || 0
 
+        // Linha 1: Natureza de Dispêndio (B-D) e Recursos humanos diretos e indiretos (E-M)
         ws_data.push([
-          "Natureza de Dispêndio",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "Recursos humanos diretos e indiretos",
-          "",
+          "", // A
+          "Natureza de Dispêndio", // B
+          "", // C
+          "", // D
+          "Recursos humanos diretos e indiretos", // E
+          "", // F
+          "", // G
+          "", // H
+          "", // I
+          "", // J
+          "", // K
+          "", // L
+          "", // M
         ])
 
-        ws_data.push(["Favorecido", "", "", "", "", "CPF", "", "", "", "Nº extrato", "", ""])
+        // Linha 2: Favorecido (B-D), CPF (E-H), Nº extrato (I-M)
+        ws_data.push([
+          "", // A
+          "Favorecido", // B
+          "", // C
+          "", // D
+          "CPF", // E
+          "", // F
+          "", // G
+          "", // H
+          "Nº extrato", // I
+          "", // J
+          "", // K
+          "", // L
+          "", // M
+        ])
 
         // Linha 3: Dados do bolsista
         ws_data.push([
-          row.nome || "",
-          "",
-          "",
-          "",
-          "",
-          formatCPF(row.cpf),
-          "",
-          "",
-          "",
-          pagamento.num_extrato || "",
-          "",
-          "",
+          "", // A
+          row.nome || "", // B
+          "", // C
+          "", // D
+          formatCPF(row.cpf), // E
+          "", // F
+          "", // G
+          "", // H
+          pagamento.num_extrato || "", // I
+          "", // J
+          "", // K
+          "", // L
+          "", // M
         ])
 
+        // Linha 4: NF/ND (B-D), Data de emissão (E-F), Data do pagamento (G-I), Rendimentos (J-M)
         ws_data.push([
-          "NF/ND",
-          "",
-          "Data de emissão da NF/ND",
-          "",
-          "",
-          "",
-          "Data do pagamento",
-          "",
-          "",
-          "",
-          "Rendimentos",
-          "",
+          "", // A
+          "NF/ND", // B
+          "", // C
+          "", // D
+          "Data de emissão da NF/ND", // E
+          "", // F
+          "Data do pagamento", // G
+          "", // H
+          "", // I
+          "Rendimentos", // J
+          "", // K
+          "", // L
+          "", // M
         ])
 
         // Linha 5: Dados inferiores
         ws_data.push([
-          pagamento.nf_nd || "",
-          "",
-          pagamento.data_emissao ? formatDateBR(pagamento.data_emissao) : "",
-          "",
-          "",
-          "",
-          pagamento.data_pagamento ? formatDateBR(pagamento.data_pagamento) : "",
-          "",
-          "",
-          "",
-          formatBRL(valorBolsa),
-          "",
+          "", // A
+          pagamento.nf_nd || "", // B
+          "", // C
+          "", // D
+          pagamento.data_emissao ? formatDateBR(pagamento.data_emissao) : "", // E
+          "", // F
+          pagamento.data_pagamento ? formatDateBR(pagamento.data_pagamento) : "", // G
+          "", // H
+          "", // I
+          formatBRL(valorBolsa), // J
+          "", // K
+          "", // L
+          "", // M
         ])
 
         // Linha vazia entre quadros
@@ -1716,54 +1737,53 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       ws["!gridlines"] = false
 
-      // Definir larguras das colunas
       ws["!cols"] = [
-        { wch: 20 }, // Coluna A
-        { wch: 5 }, // Coluna B
-        { wch: 15 }, // Coluna C
+        { wch: 3 }, // Coluna A (vazia)
+        { wch: 20 }, // Coluna B
+        { wch: 5 }, // Coluna C
         { wch: 5 }, // Coluna D
-        { wch: 5 }, // Coluna E
-        { wch: 15 }, // Coluna F
-        { wch: 5 }, // Coluna G
+        { wch: 15 }, // Coluna E
+        { wch: 5 }, // Coluna F
+        { wch: 15 }, // Coluna G
         { wch: 5 }, // Coluna H
         { wch: 5 }, // Coluna I
-        { wch: 12 }, // Coluna J
-        { wch: 15 }, // Coluna K
+        { wch: 15 }, // Coluna J
+        { wch: 5 }, // Coluna K
         { wch: 5 }, // Coluna L
+        { wch: 5 }, // Coluna M
       ]
 
       const merges = []
 
-      // Para cada bolsista, mesclar células
       let currentRow = 6 // Começa após o cabeçalho (linhas 0-5)
       bolsistasFiltrados.forEach((row, index) => {
-        // Linha 1: Mesclar "Natureza de Dispêndio" (A-J) e "Recursos humanos diretos e indiretos" (K-L)
-        merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 9 } }) // A-J
-        merges.push({ s: { r: currentRow, c: 10 }, e: { r: currentRow, c: 11 } }) // K-L
+        // Linha 1: Mesclar "Natureza de Dispêndio" (B-D) e "Recursos humanos diretos e indiretos" (E-M)
+        merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 3 } }) // B-D
+        merges.push({ s: { r: currentRow, c: 4 }, e: { r: currentRow, c: 12 } }) // E-M
 
-        // Linha 2: Mesclar "Favorecido" (A-E), "CPF" (F-I), "Nº extrato" (J-L)
-        merges.push({ s: { r: currentRow + 1, c: 0 }, e: { r: currentRow + 1, c: 4 } }) // A-E
-        merges.push({ s: { r: currentRow + 1, c: 5 }, e: { r: currentRow + 1, c: 8 } }) // F-I
-        merges.push({ s: { r: currentRow + 1, c: 9 }, e: { r: currentRow + 1, c: 11 } }) // J-L
+        // Linha 2: Mesclar "Favorecido" (B-D), "CPF" (E-H), "Nº extrato" (I-M)
+        merges.push({ s: { r: currentRow + 1, c: 1 }, e: { r: currentRow + 1, c: 3 } }) // B-D
+        merges.push({ s: { r: currentRow + 1, c: 4 }, e: { r: currentRow + 1, c: 7 } }) // E-H
+        merges.push({ s: { r: currentRow + 1, c: 8 }, e: { r: currentRow + 1, c: 12 } }) // I-M
 
         // Linha 3: Mesclar dados do bolsista
-        merges.push({ s: { r: currentRow + 2, c: 0 }, e: { r: currentRow + 2, c: 4 } }) // Nome (A-E)
-        merges.push({ s: { r: currentRow + 2, c: 5 }, e: { r: currentRow + 2, c: 8 } }) // CPF (F-I)
-        merges.push({ s: { r: currentRow + 2, c: 9 }, e: { r: currentRow + 2, c: 11 } }) // Nº extrato (J-L)
+        merges.push({ s: { r: currentRow + 2, c: 1 }, e: { r: currentRow + 2, c: 3 } }) // Nome (B-D)
+        merges.push({ s: { r: currentRow + 2, c: 4 }, e: { r: currentRow + 2, c: 7 } }) // CPF (E-H)
+        merges.push({ s: { r: currentRow + 2, c: 8 }, e: { r: currentRow + 2, c: 12 } }) // Nº extrato (I-M)
 
-        // Linha 4: Mesclar "NF/ND" (A-B), "Data de emissão" (C-F), "Data do pagamento" (G-J), "Rendimentos" (K-L)
-        merges.push({ s: { r: currentRow + 3, c: 0 }, e: { r: currentRow + 3, c: 1 } }) // A-B
-        merges.push({ s: { r: currentRow + 3, c: 2 }, e: { r: currentRow + 3, c: 5 } }) // C-F
-        merges.push({ s: { r: currentRow + 3, c: 6 }, e: { r: currentRow + 3, c: 9 } }) // G-J
-        merges.push({ s: { r: currentRow + 3, c: 10 }, e: { r: currentRow + 3, c: 11 } }) // K-L
+        // Linha 4: Mesclar "NF/ND" (B-D), "Data de emissão" (E-F), "Data do pagamento" (G-I), "Rendimentos" (J-M)
+        merges.push({ s: { r: currentRow + 3, c: 1 }, e: { r: currentRow + 3, c: 3 } }) // B-D
+        merges.push({ s: { r: currentRow + 3, c: 4 }, e: { r: currentRow + 3, c: 5 } }) // E-F
+        merges.push({ s: { r: currentRow + 3, c: 6 }, e: { r: currentRow + 3, c: 8 } }) // G-I
+        merges.push({ s: { r: currentRow + 3, c: 9 }, e: { r: currentRow + 3, c: 12 } }) // J-M
 
         // Linha 5: Mesclar dados inferiores
-        merges.push({ s: { r: currentRow + 4, c: 0 }, e: { r: currentRow + 4, c: 1 } }) // NF/ND (A-B)
-        merges.push({ s: { r: currentRow + 4, c: 2 }, e: { r: currentRow + 4, c: 5 } }) // Data emissão (C-F)
-        merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 9 } }) // Data pagamento (G-J)
-        merges.push({ s: { r: currentRow + 4, c: 10 }, e: { r: currentRow + 4, c: 11 } }) // Valor (K-L)
+        merges.push({ s: { r: currentRow + 4, c: 1 }, e: { r: currentRow + 4, c: 3 } }) // NF/ND (B-D)
+        merges.push({ s: { r: currentRow + 4, c: 4 }, e: { r: currentRow + 4, c: 5 } }) // Data emissão (E-F)
+        merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 8 } }) // Data pagamento (G-I)
+        merges.push({ s: { r: currentRow + 4, c: 9 }, e: { r: currentRow + 4, c: 12 } }) // Valor (J-M)
 
-        currentRow += 6 // Próximo quadro (5 linhas + 1 linha vazia)
+        currentRow += 5 // Próximo quadro (5 linhas)
         if (index < bolsistasFiltrados.length - 1) {
           currentRow += 1 // Linha vazia entre quadros
         }
@@ -1781,8 +1801,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             ws[cell_ref] = { t: "s", v: "" }
           }
 
-          // Adicionar bordas a todas as células da tabela (após linha 5)
-          if (R >= 6) {
+          // Aplicar estilos apenas nas células da tabela (após linha 5 e colunas B-M)
+          if (R >= 6 && C >= 1 && C <= 12) {
             ws[cell_ref].s = {
               border: {
                 top: { style: "thin", color: { rgb: "000000" } },
@@ -1796,10 +1816,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
               },
             }
 
-            // Adicionar cor de fundo cinza nos cabeçalhos
+            // Adicionar cor de fundo cinza nos cabeçalhos (linhas 1, 2 e 4 de cada quadro)
             const rowInQuadro = (R - 6) % 6
-            if (rowInQuadro === 1 || rowInQuadro === 3) {
-              // Linhas de cabeçalho (Favorecido, CPF, etc. e NF/ND, Data de emissão, etc.)
+            if (rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3) {
               ws[cell_ref].s.fill = {
                 fgColor: { rgb: "D3D3D3" },
               }
