@@ -1406,19 +1406,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const wirePagamentosTableClicks = () => {
       console.log("[v0] wirePagamentosTableClicks iniciado")
 
-      const tbody = document.getElementById("lista-pagamentos")
-      if (!tbody) {
-        console.log("[v0] tbody lista-pagamentos não encontrado")
+      const table = document.getElementById("tbl-pagamentos") // Mudança: ID da tabela para tbl-pagamentos
+      if (!table) {
+        console.log("[v0] Tabela tbl-pagamentos não encontrada")
         return
       }
 
-      const newTbody = tbody.cloneNode(true)
-      tbody.parentNode.replaceChild(newTbody, tbody)
+      // Remove event listeners antigos clonando a tabela
+      const newTable = table.cloneNode(true)
+      table.parentNode.replaceChild(newTable, table)
 
-      const finalTbody = document.getElementById("lista-pagamentos")
+      // Registra event listener na nova tabela
+      const finalTable = document.getElementById("tbl-pagamentos") // Mudança: ID da tabela para tbl-pagamentos
 
-      finalTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado no tbody", ev.target)
+      finalTable.addEventListener("click", (ev) => {
+        console.log("[v0] Click detectado na tabela", ev.target)
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
@@ -1437,7 +1439,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         openPagamentoModal(key)
       })
 
-      console.log("[v0] Event listener registrado no tbody")
+      console.log("[v0] Event listener registrado na tabela")
     }
 
     const openPagamentoModal = (key) => {
@@ -1651,16 +1653,19 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const wb = window.XLSX.utils.book_new()
       const ws_data = []
 
+      // Linhas vazias iniciais (8 linhas)
       for (let i = 0; i < 8; i++) {
         ws_data.push([])
       }
 
+      // Cabeçalho do documento (linhas 9-12 no índice 8-11)
       ws_data.push(["", "CNPJ:", ""])
       ws_data.push(["", "Termo de Parceria nº:", ""])
       ws_data.push(["", "Projeto:", ""])
       ws_data.push(["", "Prestação de Contas:", ""])
       ws_data.push([""]) // Linha vazia após cabeçalho
 
+      // Quadros de bolsistas
       bolsistasFiltrados.forEach((row, index) => {
         const key = `${row.id}_${periodoFiltro}`
         const pagamento = pagamentos.find((p) => p.key === key) || {}
@@ -1747,6 +1752,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       ws["!views"] = [{ showGridLines: false }]
 
+      // Definindo largura das colunas
       ws["!cols"] = [
         { wch: 3 }, // A
         { wch: 25 }, // B
@@ -1765,11 +1771,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const merges = []
 
-      merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ
-      merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria
-      merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto
-      merges.push({ s: { r: 11, c: 1 }, e: { r: 11, c: 2 } }) // Prestação de Contas
+      // Cabeçalho do documento
+      merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ B:C
+      merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria B:C
+      merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto B:C
+      merges.push({ s: { r: 11, c: 1 }, e: { r: 11, c: 2 } }) // Prestação de Contas B:C
 
+      // Quadros de bolsistas
       let currentRow = 13
       bolsistasFiltrados.forEach((row, index) => {
         // Linha 1: Natureza B:D, Recursos E:M
@@ -1792,7 +1800,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         merges.push({ s: { r: currentRow + 3, c: 6 }, e: { r: currentRow + 3, c: 8 } })
         merges.push({ s: { r: currentRow + 3, c: 9 }, e: { r: currentRow + 3, c: 12 } })
 
-        // Linha 5: Valores
+        // Linha 5: Valores B:D, E:F, G:I, J:M
         merges.push({ s: { r: currentRow + 4, c: 1 }, e: { r: currentRow + 4, c: 3 } })
         merges.push({ s: { r: currentRow + 4, c: 4 }, e: { r: currentRow + 4, c: 5 } })
         merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 8 } })
@@ -1820,6 +1828,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             ws[cell_ref] = { t: "s", v: "" }
           }
 
+          // Cabeçalho do documento (linhas 8-11, colunas B-C)
           if (R >= 8 && R <= 11 && C >= 1 && C <= 2) {
             ws[cell_ref].s = {
               font: { name: "Arial", sz: 12, bold: true },
@@ -1828,12 +1837,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             }
           }
 
+          // Quadros de bolsistas (a partir da linha 13)
           if (R >= 13 && C >= 1 && C <= 12) {
             const rowInQuadro = (R - 13) % 6
             const isHeaderRow = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
 
             if (isHeaderRow) {
-              // Cabeçalhos com fundo cinza e texto cinza escuro em negrito
               ws[cell_ref].s = {
                 fill: { fgColor: { rgb: "D3D3D3" } },
                 font: { bold: true, color: { rgb: "666666" } },
@@ -1841,7 +1850,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
                 border: borderStyle,
               }
             } else if (rowInQuadro === 2 || rowInQuadro === 4) {
-              // Dados sem fundo mas com bordas
               ws[cell_ref].s = {
                 alignment: { vertical: "center", horizontal: "center" },
                 border: borderStyle,
