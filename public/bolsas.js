@@ -1391,53 +1391,35 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const wirePagamentosTableClicks = () => {
-      console.log("[v0] wirePagamentosTableClicks called")
       const tbody = document.getElementById("lista-pagamentos")
 
       if (!tbody) {
-        console.error("[v0] tbody lista-pagamentos not found!")
         return
       }
 
       const newTbody = tbody.cloneNode(true)
       tbody.parentNode.replaceChild(newTbody, tbody)
-      console.log("[v0] Replaced tbody to remove old listeners")
 
       newTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Click detected on tbody", ev.target)
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
-          console.log("[v0] No row with data-key found")
           return
         }
         const { key } = rowEl.dataset
-        console.log("[v0] Opening modal for key:", key)
         openPagamentoModal(key)
       })
-      console.log("[v0] Event listener added to new tbody")
     }
 
     const openPagamentoModal = (key) => {
-      console.log("[v0] openPagamentoModal called with key:", key)
       const modal = document.getElementById("pagamento-modal")
-      if (!modal) {
-        console.error("[v0] Pagamento modal not found!")
-        return
-      }
+      if (!modal) return
 
       const [bolsistaId, periodo] = key.split("_")
-      console.log("[v0] Bolsista ID:", bolsistaId, "Periodo:", periodo)
 
       const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
-      if (!bolsista) {
-        console.error("[v0] Bolsista not found for ID:", bolsistaId)
-        return
-      }
-
-      console.log("[v0] Bolsista found:", bolsista)
+      if (!bolsista) return
 
       const pagamento = pagamentos.find((p) => p.key === key) || {}
-      console.log("[v0] Pagamento data:", pagamento)
 
       editingPagamentoKey = key
 
@@ -1467,7 +1449,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       calcularTotalPagamento()
 
-      console.log("[v0] Opening modal")
       if (typeof modal.showModal === "function") modal.showModal()
       else modal.setAttribute("open", "")
     }
@@ -1627,11 +1608,20 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       const wb = window.XLSX.utils.book_new()
       const ws_data = []
 
-      ws_data.push(["Instituição Executora:", ""])
-      ws_data.push(["CNPJ:", ""])
-      ws_data.push(["Termo de Parceria nº:", ""])
-      ws_data.push(["Projeto:", ""])
-      ws_data.push(["Prestação de Contas:", ""])
+      // Cabeçalho - linhas 0-4 (vazias para preenchimento manual)
+      ws_data.push([])
+      ws_data.push([])
+      ws_data.push([])
+      ws_data.push([])
+      ws_data.push([])
+      ws_data.push([]) // Linha vazia separadora
+      ws_data.push([]) // Linha 6 vazia
+      ws_data.push([]) // Linha 7 vazia
+
+      ws_data.push(["", "CNPJ:", ""]) // Linha 8
+      ws_data.push(["", "Termo de Parceria nº:", ""]) // Linha 9
+      ws_data.push(["", "Projeto:", ""]) // Linha 10
+      ws_data.push(["", "Prestação de Contas:", ""]) // Linha 11
       ws_data.push([]) // Linha vazia
 
       // Para cada bolsista, criar um quadro
@@ -1739,12 +1729,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       ws["!cols"] = [
         { wch: 3 }, // Coluna A (vazia)
-        { wch: 20 }, // Coluna B
-        { wch: 5 }, // Coluna C
+        { wch: 25 }, // Coluna B
+        { wch: 20 }, // Coluna C
         { wch: 5 }, // Coluna D
-        { wch: 15 }, // Coluna E
+        { wch: 25 }, // Coluna E
         { wch: 5 }, // Coluna F
-        { wch: 15 }, // Coluna G
+        { wch: 20 }, // Coluna G
         { wch: 5 }, // Coluna H
         { wch: 5 }, // Coluna I
         { wch: 15 }, // Coluna J
@@ -1755,7 +1745,12 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const merges = []
 
-      let currentRow = 6 // Começa após o cabeçalho (linhas 0-5)
+      merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ
+      merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria
+      merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto
+      merges.push({ s: { r: 11, c: 1 }, e: { r: 11, c: 2 } }) // Prestação de Contas
+
+      let currentRow = 13 // Começa após o cabeçalho e linha vazia
       bolsistasFiltrados.forEach((row, index) => {
         // Linha 1: Mesclar "Natureza de Dispêndio" (B-D) e "Recursos humanos diretos e indiretos" (E-M)
         merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 3 } }) // B-D
@@ -1801,9 +1796,25 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             ws[cell_ref] = { t: "s", v: "" }
           }
 
-          // Aplicar estilos apenas nas células da tabela (após linha 5 e colunas B-M)
-          if (R >= 6 && C >= 1 && C <= 12) {
+          if (R >= 8 && R <= 11 && C >= 1 && C <= 2) {
             ws[cell_ref].s = {
+              font: {
+                name: "Arial",
+                sz: 12,
+                bold: true,
+              },
+              alignment: {
+                vertical: "center",
+                horizontal: "left",
+              },
+              border: {
+                right: { style: "thin", color: { rgb: "000000" } },
+              },
+            }
+          }
+
+          if (R >= 13 && C >= 1 && C <= 12) {
+            const baseStyle = {
               border: {
                 top: { style: "thin", color: { rgb: "000000" } },
                 bottom: { style: "thin", color: { rgb: "000000" } },
@@ -1816,12 +1827,23 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
               },
             }
 
-            // Adicionar cor de fundo cinza nos cabeçalhos (linhas 1, 2 e 4 de cada quadro)
-            const rowInQuadro = (R - 6) % 6
-            if (rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3) {
-              ws[cell_ref].s.fill = {
-                fgColor: { rgb: "D3D3D3" },
+            const rowInQuadro = (R - 13) % 6
+            const isHeader = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
+
+            if (isHeader) {
+              ws[cell_ref].s = {
+                ...baseStyle,
+                fill: {
+                  fgColor: { rgb: "D3D3D3" },
+                },
+                font: {
+                  bold: true,
+                  color: { rgb: "666666" },
+                },
               }
+            } else {
+              // Células de dados: sem fundo, sem negrito
+              ws[cell_ref].s = baseStyle
             }
           }
         }
