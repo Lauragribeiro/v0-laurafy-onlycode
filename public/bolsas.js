@@ -1391,25 +1391,25 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const wirePagamentosTableClicks = () => {
-      const table = document.getElementById("tbl-pagamentos")
-      if (!table) {
-        console.log("[v0] Tabela tbl-pagamentos não encontrada")
+      const tbody = document.getElementById("lista-pagamentos")
+      if (!tbody) {
+        console.log("[v0] tbody lista-pagamentos não encontrado")
         return
       }
 
-      // Remove event listeners antigos
-      // const newTable = table.cloneNode(true) // REMOVED: Clonagem desnecessária com event delegation
-      // table.parentNode.replaceChild(newTable, table) // REMOVED: Substituição desnecessária
+      // Remove event listeners antigos usando replaceWith
+      const newTbody = tbody.cloneNode(false)
+      tbody.parentNode.replaceChild(newTbody, tbody)
 
-      const finalTable = document.getElementById("tbl-pagamentos") // Get the original table element again
-      if (!finalTable) {
-        console.log("[v0] finalTable não encontrado") // Should not happen if 'table' was found
+      // Adiciona event listener no tbody novo
+      const finalTbody = document.getElementById("lista-pagamentos")
+      if (!finalTbody) {
+        console.log("[v0] finalTbody não encontrado após clonagem")
         return
       }
 
-      // Event delegation na tabela inteira
-      finalTable.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado na tabela", ev.target)
+      finalTbody.addEventListener("click", (ev) => {
+        console.log("[v0] Click detectado no tbody", ev.target)
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
@@ -1427,6 +1427,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
         openPagamentoModal(key)
       })
+
+      console.log("[v0] Event listener registrado com sucesso no tbody")
     }
 
     const openPagamentoModal = (key) => {
@@ -1645,7 +1647,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         ws_data.push([""])
       }
 
-      // Cabeçalho do documento (linhas 9-12)
+      // Cabeçalho do documento (linhas 9-12) - Vazias para preenchimento manual
       ws_data.push(["", "CNPJ:", ""])
       ws_data.push(["", "Termo de Parceria nº:", ""])
       ws_data.push(["", "Projeto:", ""])
@@ -1737,7 +1739,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const ws = window.XLSX.utils.aoa_to_sheet(ws_data)
 
-      // Remover linhas de grade
       ws["!views"] = [{ showGridLines: false }]
 
       // Largura das colunas
@@ -1757,7 +1758,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         { wch: 5 }, // M
       ]
 
-      // Células mescladas
       const merges = []
 
       // Cabeçalho do documento
@@ -1795,19 +1795,24 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         merges.push({ s: { r: currentRow + 4, c: 6 }, e: { r: currentRow + 4, c: 8 } })
         merges.push({ s: { r: currentRow + 4, c: 9 }, e: { r: currentRow + 4, c: 12 } })
 
-        currentRow += 6 // Pular 6 linhas (5 de dados + 1 linha vazia para o próximo quadro)
+        currentRow += 6
       })
 
       ws["!merges"] = merges
 
-      // Aplicar estilos
+      const borderStyle = {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } },
+      }
+
       const range = window.XLSX.utils.decode_range(ws["!ref"])
 
       for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const cell_ref = window.XLSX.utils.encode_cell({ c: C, r: R })
 
-          // Criar célula se não existir
           if (!ws[cell_ref]) {
             ws[cell_ref] = { t: "s", v: "" }
           }
@@ -1823,33 +1828,22 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
           // Quadros de bolsistas (linha 14+, colunas B-M)
           if (R >= 13 && C >= 1 && C <= 12) {
-            const rowInQuadro = (R - 13) % 6 // Calcula a linha dentro de um quadro de 6 linhas
+            const rowInQuadro = (R - 13) % 6
             const isHeaderRow = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
 
             if (isHeaderRow) {
-              // Cabeçalhos com fundo cinza e texto em negrito
+              // Cabeçalhos com fundo cinza e texto em negrito cinza escuro
               ws[cell_ref].s = {
-                fill: { fgColor: { rgb: "D3D3D3" } }, // Cinza claro
-                font: { bold: true, color: { rgb: "666666" } }, // Cinza escuro
+                fill: { fgColor: { rgb: "D3D3D3" } },
+                font: { bold: true, color: { rgb: "666666" } },
                 alignment: { vertical: "center", horizontal: "center" },
-                border: {
-                  top: { style: "thin", color: { rgb: "000000" } },
-                  bottom: { style: "thin", color: { rgb: "000000" } },
-                  left: { style: "thin", color: { rgb: "000000" } },
-                  right: { style: "thin", color: { rgb: "000000" } },
-                },
+                border: borderStyle,
               }
-            } else if (rowInQuadro !== 5) {
-              // Não aplicar borda inferior à última linha de dados de cada quadro
-              // Valores com bordas
+            } else if (rowInQuadro === 2 || rowInQuadro === 4) {
+              // Linhas de valores com bordas
               ws[cell_ref].s = {
                 alignment: { vertical: "center", horizontal: "center" },
-                border: {
-                  top: { style: "thin", color: { rgb: "000000" } },
-                  bottom: { style: "thin", color: { rgb: "000000" } },
-                  left: { style: "thin", color: { rgb: "000000" } },
-                  right: { style: "thin", color: { rgb: "000000" } },
-                },
+                border: borderStyle,
               }
             }
           }
