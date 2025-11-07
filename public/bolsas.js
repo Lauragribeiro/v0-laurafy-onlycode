@@ -1338,7 +1338,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (!periodoFiltro) {
         tbody.innerHTML =
           '<tr class="table-empty"><td colspan="16">Selecione um período para visualizar os pagamentos.</td></tr>'
-        wirePagamentosTableClicks()
         return
       }
 
@@ -1349,7 +1348,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       if (bolsistasFiltrados.length === 0) {
         tbody.innerHTML = '<tr class="table-empty"><td colspan="16">Nenhum bolsista vinculado a este período.</td></tr>'
-        wirePagamentosTableClicks()
         return
       }
 
@@ -1395,7 +1393,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const wirePagamentosTableClicks = () => {
       const tbody = document.getElementById("lista-pagamentos")
       if (!tbody) {
-        console.log("[v0] tbody lista-pagamentos não encontrado")
         return
       }
 
@@ -1404,26 +1401,17 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const finalTbody = document.getElementById("lista-pagamentos")
       if (!finalTbody) {
-        console.log("[v0] finalTbody não encontrado após clonagem")
         return
       }
 
-      console.log("[v0] Registrando event listener no tbody de pagamentos")
-
       finalTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Clique detectado no tbody de pagamentos")
-
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
-          console.log("[v0] Clique não foi em uma linha com data-key")
           return
         }
 
         const { key } = rowEl.dataset
-        console.log("[v0] Abrindo modal para key:", key)
-
         if (!key) {
-          console.log("[v0] key está vazio")
           return
         }
 
@@ -1432,27 +1420,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     const openPagamentoModal = (key) => {
-      console.log("[v0] openPagamentoModal chamado com key:", key)
-
       const modal = document.getElementById("pagamento-modal")
       if (!modal) {
-        console.log("[v0] Modal pagamento-modal não encontrado")
         return
       }
 
       const [bolsistaId, periodo] = key.split("_")
-      console.log("[v0] bolsistaId:", bolsistaId, "periodo:", periodo)
-
       const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
       if (!bolsista) {
-        console.log("[v0] Bolsista não encontrado para id:", bolsistaId)
         return
       }
 
-      console.log("[v0] Bolsista encontrado:", bolsista.nome)
-
       const pagamento = pagamentos.find((p) => p.key === key) || {}
-      console.log("[v0] Pagamento encontrado:", pagamento)
 
       editingPagamentoKey = key
 
@@ -1482,7 +1461,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       calcularTotalPagamento()
 
-      console.log("[v0] Abrindo modal")
       if (typeof modal.showModal === "function") modal.showModal()
       else modal.setAttribute("open", "")
     }
@@ -1657,7 +1635,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         const pagamento = pagamentos.find((p) => p.key === key) || {}
         const valorBolsa = parseMoney(pagamento.valor_bolsa) || row.valor || 0
 
-        // Linha 1: Natureza de Dispêndio | Recursos humanos
         ws_data.push([
           "",
           "Natureza de Dispêndio",
@@ -1674,10 +1651,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           "",
         ])
 
-        // Linha 2: Favorecido | CPF | Nº extrato
         ws_data.push(["", "Favorecido", "", "", "CPF", "", "", "", "Nº extrato", "", "", "", ""])
 
-        // Linha 3: Dados do Favorecido | CPF | Nº extrato
         ws_data.push([
           "",
           row.nome || "",
@@ -1694,7 +1669,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           "",
         ])
 
-        // Linha 4: NF/ND | Data de emissão da NF/ND | Data do pagamento | Rendimentos
         ws_data.push([
           "",
           "NF/ND",
@@ -1711,7 +1685,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           "",
         ])
 
-        // Linha 5: Dados NF/ND | Data emissão | Data pagamento | Valor
         ws_data.push([
           "",
           pagamento.nf_nd || "",
@@ -1756,13 +1729,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const merges = []
 
-      // Cabeçalho (linhas 9-12, índices 8-11)
       merges.push({ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }) // CNPJ
       merges.push({ s: { r: 9, c: 1 }, e: { r: 9, c: 2 } }) // Termo de Parceria
       merges.push({ s: { r: 10, c: 1 }, e: { r: 10, c: 2 } }) // Projeto
       merges.push({ s: { r: 11, c: 1 }, e: { r: 11, c: 2 } }) // Prestação de Contas
 
-      // Quadros de bolsistas (começam na linha 14, índice 13)
       let currentRow = 13
       bolsistasFiltrados.forEach((row, index) => {
         // Linha 1: Natureza (B-D) | Recursos humanos (E-M)
@@ -1810,7 +1781,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             ws[cell_ref] = { t: "s", v: "" }
           }
 
-          // Cabeçalho do documento (linhas 9-12, colunas B-C)
           if (R >= 8 && R <= 11 && C >= 1 && C <= 2) {
             ws[cell_ref].s = {
               font: {
@@ -1828,7 +1798,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             }
           }
 
-          // Quadros de bolsistas (a partir da linha 14)
           if (R >= 13 && C >= 1 && C <= 12) {
             const rowInQuadro = (R - 13) % 6
             const isHeaderRow = rowInQuadro === 0 || rowInQuadro === 1 || rowInQuadro === 3
@@ -1847,7 +1816,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
             }
 
             if (isHeaderRow) {
-              // Células de cabeçalho: fundo cinza, texto cinza escuro em negrito
               ws[cell_ref].s = {
                 ...borderStyle,
                 fill: {
@@ -1859,7 +1827,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
                 },
               }
             } else {
-              // Células de dados: sem fundo, com bordas
               ws[cell_ref].s = borderStyle
             }
           }
