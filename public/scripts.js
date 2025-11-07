@@ -82,6 +82,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const fInst = $("#pe-inst")
   const fGer = $("#pe-gerente")
   const fCoord = $("#pe-coordenador")
+  const fEmailGer = $("#pe-emailGerente")
   const fCnpj = $("#pe-cnpj")
   const fTermo = $("#pe-termo")
 
@@ -191,12 +192,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (tipoAcesso === "GERENTE") {
         all = all.filter((p) => {
-          const gerente = (p.gerente || "").trim().toLowerCase()
-          const responsavel = (p.responsavel || "").trim().toLowerCase()
+          const emailGerente = (p.emailGerente || "").trim().toLowerCase()
           const email = emailUsuario.toLowerCase()
 
           // Mostrar apenas projetos onde o email do gerente corresponde ao usuário logado
-          return gerente.includes(email) || responsavel.includes(email) || gerente === email || responsavel === email
+          return emailGerente === email
         })
       }
 
@@ -229,8 +229,11 @@ document.addEventListener("DOMContentLoaded", () => {
       vigenciaFim: fd.get("vigenciaFim"),
       status: fd.get("status"),
       gerente: fd.get("gerente"),
+      emailGerente: fd.get("emailGerente"),
       instituicao: fd.get("instituicao"),
       coordenador: fd.get("coordenador"),
+      cnpj: fd.get("cnpj"),
+      termoParceria: fd.get("termoParceria"),
     }
 
     try {
@@ -270,6 +273,7 @@ document.addEventListener("DOMContentLoaded", () => {
     fInst.value = proj.instituicao ?? "EDGE"
     fGer.value = proj.gerente ?? proj.responsavel ?? ""
     fCoord.value = proj.coordenador ?? ""
+    fEmailGer.value = proj.emailGerente ?? ""
     fCnpj.value = proj.cnpj ?? ""
     fTermo.value = proj.termoParceria ?? ""
 
@@ -293,6 +297,7 @@ document.addEventListener("DOMContentLoaded", () => {
       instituicao: fInst.value,
       gerente: fGer.value?.trim() || null,
       coordenador: fCoord.value?.trim() || null,
+      emailGerente: fEmailGer.value?.trim() || null,
       cnpj: fCnpj.value?.trim() || null,
       termoParceria: fTermo.value?.trim() || null,
     }
