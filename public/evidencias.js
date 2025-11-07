@@ -441,10 +441,18 @@ document.addEventListener("DOMContentLoaded", () => {
   qtdMetas.addEventListener("input", saveLS)
 
   function wireTabs() {
-    // Implement tab wiring logic here
-    // Example: tabEvid.addEventListener("click", () => { /* tab logic */ });
-    // Example: tabDoc.addEventListener("click", () => { /* tab logic */ });
-    // Example: tabBolsas.addEventListener("click", () => { /* tab logic */ });
+    const qs = projectId ? `?id=${encodeURIComponent(projectId)}` : ""
+
+    if (tabEvid) {
+      tabEvid.href = `/prestacao.html${qs}`
+      tabEvid.classList.add("active")
+    }
+    if (tabDoc) {
+      tabDoc.href = `/docfin.html${qs}`
+    }
+    if (tabBolsas) {
+      tabBolsas.href = `/bolsas.html${qs}`
+    }
   }
   ;(async () => {
     wireTabs()
