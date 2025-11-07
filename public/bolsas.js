@@ -1420,7 +1420,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         return
       }
 
-      // Clonar o tbody para remover event listeners antigos
       const newTbody = tbody.cloneNode(true)
       tbody.parentNode.replaceChild(newTbody, tbody)
 
@@ -1432,7 +1431,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       )
 
       finalTbody.addEventListener("click", (ev) => {
-        console.log("[v0] Click detectado. Target:", ev.target.tagName, ev.target.textContent.substring(0, 30))
+        console.log("[v0] Click detectado no tbody")
+        console.log("[v0] ev.target:", ev.target)
+        console.log("[v0] ev.target.tagName:", ev.target.tagName)
+        console.log("[v0] ev.target.closest('tr[data-key]'):", ev.target.closest("tr[data-key]"))
 
         const rowEl = ev.target.closest("tr[data-key]")
         if (!rowEl) {
@@ -1460,26 +1462,31 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       const modal = document.getElementById("pagamento-modal")
       if (!modal) {
-        console.log("[v0] Modal não encontrado")
+        console.error("[v0] Modal pagamento-modal não encontrado no DOM!")
+        alert("Modal de pagamento não encontrado. Verifique o HTML.")
         return
       }
+
+      console.log("[v0] Modal encontrado:", modal)
 
       const [bolsistaId, periodo] = key.split("_")
       console.log("[v0] bolsistaId:", bolsistaId, "periodo:", periodo)
 
       const bolsista = bolsistas.find((b) => String(b.id) === String(bolsistaId))
       if (!bolsista) {
-        console.log("[v0] Bolsista não encontrado")
+        console.error("[v0] Bolsista não encontrado para ID:", bolsistaId)
+        alert("Bolsista não encontrado.")
         return
       }
 
-      console.log("[v0] Bolsista encontrado:", bolsista)
+      console.log("[v0] Bolsista encontrado:", bolsista.nome)
 
       const pagamento = pagamentos.find((p) => p.key === key) || {}
-      console.log("[v0] Pagamento:", pagamento)
+      console.log("[v0] Pagamento encontrado:", pagamento)
 
       editingPagamentoKey = key
 
+      // Preencher os campos do modal
       document.getElementById("pagamento-bolsista-id").value = bolsistaId
       document.getElementById("pagamento-periodo").value = periodo
       document.getElementById("pagamento-cpf").value = formatCPF(bolsista.cpf)
@@ -1506,9 +1513,21 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       calcularTotalPagamento()
 
-      console.log("[v0] Abrindo modal")
-      if (typeof modal.showModal === "function") modal.showModal()
-      else modal.setAttribute("open", "")
+      console.log("[v0] Tentando abrir modal...")
+      console.log("[v0] modal.showModal disponível?", typeof modal.showModal)
+
+      try {
+        if (typeof modal.showModal === "function") {
+          modal.showModal()
+          console.log("[v0] Modal aberto com showModal()")
+        } else {
+          modal.setAttribute("open", "")
+          console.log("[v0] Modal aberto com setAttribute('open', '')")
+        }
+      } catch (err) {
+        console.error("[v0] Erro ao abrir modal:", err)
+        alert("Erro ao abrir modal: " + err.message)
+      }
     }
 
     const closePagamentoModal = () => {
