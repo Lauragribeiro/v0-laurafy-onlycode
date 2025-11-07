@@ -87,14 +87,22 @@ export const buildBolsistaRecord = ({
     : []
 
   if (editingId && existingRecord) {
-    const changes = []
-    if (existingRecord.funcao !== funcao) changes.push(`Função: ${existingRecord.funcao} → ${funcao}`)
-    if (existingRecord.valor !== valorNum) changes.push(`Valor: R$ ${existingRecord.valor} → R$ ${valorNum}`)
-
-    if (changes.length > 0) {
+    if (existingRecord.funcao !== funcao) {
       historicoAlteracoes.push({
-        data: now,
-        alteracoes: changes,
+        campo: "funcao",
+        campoLabel: "Função no Projeto",
+        anterior: existingRecord.funcao,
+        atual: funcao,
+        modificadoEm: now,
+      })
+    }
+    if (existingRecord.valor !== valorNum) {
+      historicoAlteracoes.push({
+        campo: "valor",
+        campoLabel: "Valor da Bolsa",
+        anterior: existingRecord.valor,
+        atual: valorNum,
+        modificadoEm: now,
       })
     }
   }
@@ -694,7 +702,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       try {
         const raw = localStorage.getItem(pagamentosStorageKey())
         if (raw) {
-          const parsed = JSON.parse(raw)
+          const parsed = JSON.JSON.parse(raw)
           if (Array.isArray(parsed)) {
             pagamentos = parsed
           }
@@ -1406,18 +1414,16 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     const wirePagamentosTableClicks = () => {
       console.log("[v0] wirePagamentosTableClicks iniciado")
 
-      const table = document.getElementById("tbl-pagamentos") // Mudança: ID da tabela para tbl-pagamentos
+      const table = document.getElementById("tbl-pagamentos")
       if (!table) {
         console.log("[v0] Tabela tbl-pagamentos não encontrada")
         return
       }
 
-      // Remove event listeners antigos clonando a tabela
       const newTable = table.cloneNode(true)
       table.parentNode.replaceChild(newTable, table)
 
-      // Registra event listener na nova tabela
-      const finalTable = document.getElementById("tbl-pagamentos") // Mudança: ID da tabela para tbl-pagamentos
+      const finalTable = document.getElementById("tbl-pagamentos")
 
       finalTable.addEventListener("click", (ev) => {
         console.log("[v0] Click detectado na tabela", ev.target)
@@ -1811,6 +1817,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 
       ws["!merges"] = merges
 
+      // AplicAR formatações com bordas, cores e negrito
       const borderStyle = {
         top: { style: "thin", color: { rgb: "000000" } },
         bottom: { style: "thin", color: { rgb: "000000" } },

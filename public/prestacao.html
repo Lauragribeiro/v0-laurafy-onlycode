@@ -50,12 +50,14 @@
       <div class="form-row">
         <label class="field">
           <span>Cronograma de execução — Início</span>
-          <input id="cron-inicio" type="date" readonly />
+          <!-- Remover readonly para tornar editável -->
+          <input id="cron-inicio" type="date" />
         </label>
 
         <label class="field">
           <span>Cronograma de execução — Fim</span>
-          <input id="cron-fim" type="date" readonly />
+          <!-- Remover readonly para tornar editável -->
+          <input id="cron-fim" type="date" />
         </label>
 
         <label class="field">
@@ -88,6 +90,8 @@
               <th>Upload de evidência</th>
               <th>Status</th>
               <th>Ações</th>
+              <!-- Adicionar coluna Notificar o Gerente -->
+              <th>Notificar o Gerente</th>
             </tr>
           </thead>
           <tbody><!-- linhas via JS --></tbody>
@@ -105,3 +109,5 @@
   document.querySelector("#userName")?.textContent = me?.name || "";
   document.querySelector("#logoutBtn")?.addEventListener("click", logout);
 </script>
+</body>
+</html>
