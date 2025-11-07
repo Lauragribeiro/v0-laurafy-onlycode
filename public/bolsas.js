@@ -1883,7 +1883,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       wireButtons()
       wireForm()
       wireTableClicks()
-      wirePagamentosTableClicks() // Garantir que seja chamado no init
+      wirePagamentosTableClicks()
       wirePagamentoInputs()
       wirePagamentoButtons()
       wirePagamentoForm()
