@@ -1298,271 +1298,162 @@ async function lerConteudoPDF(cot) {
   return texto.replace(/\u0000/g, " ").trim()
 }
 
+// Início da atualização do código: Simplificando drasticamente a função de extração
 async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
-  console.log("[v0] ========== EXTRAÇÃO DE COTAÇÕES (SEM IA) ==========")
-  console.log("[v0] Número de cotações recebidas:", cotacoes?.length || 0)
-  console.log("[v0] Dados da linha:", JSON.stringify(dadosLinha, null, 2))
+  console.log("[v0] ========== INICIANDO EXTRAÇÃO DE COTAÇÕES ==========")
+  console.log("[v0] Total de cotações recebidas:", cotacoes?.length || 0)
 
   const propostas = []
-  let objetoGlobal = ""
+  const objeto = dadosLinha?.objeto || "Sem descrição"
 
-  if (!cotacoes || cotacoes.length === 0) {
-    console.log("[v0] Nenhuma cotação fornecida")
-    return { objeto: "", propostas: [] }
+  if (!cotacoes || !Array.isArray(cotacoes) || cotacoes.length === 0) {
+    console.log("[v0] ⚠️ Nenhuma cotação para processar")
+    return { objeto, propostas: [] }
   }
 
+  // Processa cada cotação
   for (let i = 0; i < cotacoes.length; i++) {
-    const cot = cotacoes[i]
-    console.log(`[v0] Processando Cotação ${i + 1}/${cotacoes.length}`)
-
-    let texto = ""
-    const nomeArquivo = cot?.name || cot?.filename || cot?.originalname || `Fornecedor ${i + 1}`
+    const cotacao = cotacoes[i]
+    console.log(`[v0] --- Processando cotação ${i + 1}/${cotacoes.length} ---`)
 
     try {
-      // Estratégia 1: Texto pré-extraído
-      if (cot?.text && typeof cot.text === "string" && cot.text.length > 50) {
-        texto = cot.text
-        console.log(`[v0] Usando texto pré-extraído (${texto.length} chars)`)
+      let textoExtraido = ""
+
+      // Estratégia 1: Se já tem texto extraído
+      if (cotacao.textoExtraido) {
+        textoExtraido = cotacao.textoExtraido
+        console.log(`[v0] ✓ Usando texto pré-extraído (${textoExtraido.length} chars)`)
       }
-      // Estratégia 2: Ler do filesystem
-      else if (cot?.path || cot?.filepath || cot?.filename) {
-        const paths = [cot.path, cot.filepath, cot.filename, cot.key, cot.url].filter(Boolean)
-        console.log(`[v0] Tentando ler de paths:`, paths)
+      // Estratégia 2: Tentar ler do filesystem
+      else if (cotacao.nomeArquivo) {
+        const caminhosPossiveis = [
+          path.join(UPLOADS_DIR, cotacao.nomeArquivo),
+          path.join(__dirname, "data", "uploads", cotacao.nomeArquivo),
+          path.join(__dirname, "uploads", cotacao.nomeArquivo),
+        ]
 
-        for (const p of paths) {
-          if (!p) continue
+        for (const caminho of caminhosPossiveis) {
+          try {
+            if (fs.existsSync(caminho)) {
+              const buffer = await fsp.readFile(caminho)
 
-          const cleanPath = p.replace(/^https?:\/\/[^/]+\//, "").replace(/^\/+/, "")
-          const possiblePaths = [
-            cleanPath,
-            `data/${cleanPath}`,
-            `data/uploads/${cleanPath}`,
-            path.join(DATA_DIR, cleanPath),
-            path.join(DATA_DIR, "uploads", cleanPath),
-            path.join(__dirname, cleanPath),
-            path.join(__dirname, "data", "uploads", cleanPath),
-          ]
+              // Detecta se é PDF
+              const isPdf = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
 
-          for (const testPath of possiblePaths) {
-            try {
-              if (fs.existsSync(testPath)) {
-                console.log(`[v0] Arquivo encontrado em: ${testPath}`)
-                const buffer = fs.readFileSync(testPath)
-
-                // Verifica se é PDF
-                const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
-
-                if (isPDF) {
-                  console.log(`[v0] Arquivo é PDF, extraindo texto...`)
-                  const pdfParse = (await import("pdf-parse")).default
-                  const pdfData = await pdfParse(buffer)
-                  texto = pdfData.text
-                  console.log(`[v0] PDF parseado com sucesso (${texto.length} chars)`)
-                  break
-                } else {
-                  texto = buffer.toString("utf-8")
-                  console.log(`[v0] Arquivo lido como texto (${texto.length} chars)`)
-                  break
-                }
+              if (isPdf) {
+                const pdfParse = (await import("pdf-parse")).default
+                const pdfData = await pdfParse(buffer)
+                textoExtraido = pdfData.text
+                console.log(`[v0] ✓ PDF lido com sucesso: ${caminho} (${textoExtraido.length} chars)`)
+              } else {
+                textoExtraido = buffer.toString("utf-8")
+                console.log(`[v0] ✓ Arquivo texto lido: ${caminho} (${textoExtraido.length} chars)`)
               }
-            } catch (err) {
-              console.log(`[v0] Erro ao ler ${testPath}:`, err.message)
-              continue
+              break
             }
+          } catch (err) {
+            console.log(`[v0] ✗ Erro ao ler ${caminho}:`, err.message)
           }
-
-          if (texto.length > 50) break
         }
       }
 
-      // Estratégia 3: Base64
-      if (!texto && cot?.data) {
-        console.log(`[v0] Tentando decodificar base64...`)
-        try {
-          const buffer = Buffer.from(cot.data, "base64")
-          const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
-
-          if (isPDF) {
-            const pdfParse = (await import("pdf-parse")).default
-            const pdfData = await pdfParse(buffer)
-            texto = pdfData.text
-            console.log(`[v0] PDF base64 parseado (${texto.length} chars)`)
-          } else {
-            texto = buffer.toString("utf-8")
-            console.log(`[v0] Texto base64 decodificado (${texto.length} chars)`)
-          }
-        } catch (err) {
-          console.log(`[v0] Erro ao decodificar base64:`, err.message)
-        }
-      }
-
-      if (!texto || texto.length < 50) {
-        console.warn(`[v0] FALHA: Não foi possível extrair texto do PDF`)
+      if (!textoExtraido || textoExtraido.length < 10) {
+        console.log(`[v0] ⚠️ Texto insuficiente para cotação ${i + 1}`)
         propostas.push({
-          selecao: `Cotação ${i + 1}`,
-          ofertante: nomeArquivo,
-          cnpj_ofertante: "",
+          ofertante: cotacao.nomeArquivo || `Empresa ${i + 1}`,
+          cnpj: "",
           data_cotacao: "",
           valor: "",
-          observacao: "Erro: Não foi possível ler o arquivo PDF",
+          observacao: "Não foi possível extrair informações do documento",
         })
         continue
       }
 
-      console.log(`[v0] TEXTO EXTRAÍDO COM SUCESSO`)
-      console.log(`[v0] Primeiros 300 caracteres:`, texto.substring(0, 300))
+      console.log(`[v0] Texto extraído (primeiros 200 chars): ${textoExtraido.substring(0, 200)}...`)
 
-      // Parser determinístico
-      console.log(`[v0] Iniciando parsing com regex...`)
-
-      // 1. CNPJ
-      let cnpj = ""
-      const cnpjRegex1 = /CNPJ[:\s]*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/gi
-      const cnpjRegex2 = /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/g
-      const cnpjRegex3 = /(\d{14})/g
-
-      let matchCnpj = texto.match(cnpjRegex1)
-      if (!matchCnpj) matchCnpj = texto.match(cnpjRegex2)
-      if (!matchCnpj) matchCnpj = texto.match(cnpjRegex3)
-
-      if (matchCnpj) {
-        cnpj = matchCnpj[0].replace(/[^\d]/g, "")
-        if (cnpj.length === 14) {
-          cnpj = `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`
-        }
-        console.log(`[v0] CNPJ encontrado: ${cnpj}`)
-      }
-
-      // 2. Nome da empresa
-      let ofertante = ""
-      const empresaRegex1 = /BIDMAX SOLU[ÇC][ÕO]ES CORPORATIVAS/i
-      const empresaRegex2 = /Sistema Inform[áa]tica/i
-      const empresaRegex3 = /Dell Technologies/i
-      const empresaRegex4 = /Raz[ãa]o Social[:\s]*([^\n\r]{3,80})/i
-
-      if (empresaRegex1.test(texto)) {
-        ofertante = "BIDMAX SOLUÇÕES CORPORATIVAS"
-      } else if (empresaRegex2.test(texto)) {
-        ofertante = "Sistema Informática"
-      } else if (empresaRegex3.test(texto)) {
-        ofertante = "Dell Technologies"
-      } else {
-        const matchEmpresa = texto.match(empresaRegex4)
-        if (matchEmpresa) {
-          ofertante = matchEmpresa[1].trim()
-        }
-      }
-
-      if (!ofertante) {
-        ofertante = nomeArquivo.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ")
-      }
-      console.log(`[v0] Ofertante: ${ofertante}`)
-
-      // 3. Data
-      let data = ""
-      const dataRegex1 = /(\d{1,2})\/(\d{1,2})\/(\d{4})/
-      const dataRegex2 =
-        /(\d{1,2})\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i
-
-      const matchData1 = texto.match(dataRegex1)
-      const matchData2 = texto.match(dataRegex2)
-
-      if (matchData1) {
-        data = `${matchData1[1].padStart(2, "0")}/${matchData1[2].padStart(2, "0")}/${matchData1[3]}`
-      } else if (matchData2) {
-        const meses = {
-          janeiro: "01",
-          fevereiro: "02",
-          março: "03",
-          marco: "03",
-          abril: "04",
-          maio: "05",
-          junho: "06",
-          julho: "07",
-          agosto: "08",
-          setembro: "09",
-          outubro: "10",
-          novembro: "11",
-          dezembro: "12",
-        }
-        const mes = meses[matchData2[2].toLowerCase()]
-        if (mes) {
-          data = `${matchData2[1].padStart(2, "0")}/${mes}/${matchData2[3]}`
-        }
-      }
-      console.log(`[v0] Data: ${data || "(não encontrada)"}`)
-
-      // 4. Valor
-      let valor = ""
-      const valorMatches = texto.match(/R\$\s*([\d.,]+)/g) || []
-      let maiorValor = 0
-
-      for (const valorMatch of valorMatches) {
-        const numStr = valorMatch
-          .replace(/R\$\s*/, "")
-          .replace(/\./g, "")
-          .replace(",", ".")
-        const num = Number.parseFloat(numStr)
-        if (!isNaN(num) && num > maiorValor) {
-          maiorValor = num
-          valor = `R$ ${num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        }
-      }
-      console.log(`[v0] Valor: ${valor || "(não encontrado)"}`)
-
-      // 5. Observações
-      let observacao = "Conforme proposta anexa"
-      const obsRegex = /(?:Prazo de entrega|Entrega|Garantia|Forma de pagamento)[:\s]*([^\n\r]{5,100})/i
-      const matchObs = texto.match(obsRegex)
-      if (matchObs) {
-        observacao = matchObs[1].trim()
-      }
-      console.log(`[v0] Observação: ${observacao}`)
-
-      // 6. Objeto (apenas primeira cotação)
-      if (i === 0 && !objetoGlobal) {
-        const objetoRegex = /(?:Objeto|Item|Produto)[:\s]*([^\n\r]{10,200})/i
-        const matchObjeto = texto.match(objetoRegex)
-        if (matchObjeto) {
-          objetoGlobal = matchObjeto[1].trim()
-          console.log(`[v0] Objeto global: ${objetoGlobal}`)
-        }
-      }
-
-      // Adiciona proposta
+      // Extração simples com regex
       const proposta = {
-        selecao: `Cotação ${i + 1}`,
-        ofertante: ofertante || nomeArquivo,
-        cnpj_ofertante: cnpj || "",
-        data_cotacao: data || "",
-        valor: valor || "",
-        observacao: observacao,
-      }
-
-      console.log(`[v0] PROPOSTA CRIADA:`, JSON.stringify(proposta, null, 2))
-      propostas.push(proposta)
-    } catch (error) {
-      console.error(`[v0] ERRO FATAL:`, error)
-      propostas.push({
-        selecao: `Cotação ${i + 1}`,
-        ofertante: nomeArquivo,
-        cnpj_ofertante: "",
+        ofertante: "",
+        cnpj: "",
         data_cotacao: "",
         valor: "",
-        observacao: `Erro: ${error.message}`,
+        observacao: "",
+      }
+
+      // CNPJ
+      const cnpjMatch = textoExtraido.match(/(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/)
+      if (cnpjMatch) {
+        proposta.cnpj = cnpjMatch[1]
+          .replace(/[^\d]/g, "")
+          .replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
+        console.log(`[v0] ✓ CNPJ encontrado: ${proposta.cnpj}`)
+      }
+
+      // Nome da empresa (pega do nome do arquivo ou busca no texto)
+      if (cotacao.nomeArquivo) {
+        proposta.ofertante = cotacao.nomeArquivo.replace(/\.(pdf|txt|docx)$/i, "")
+      } else {
+        const empresaMatch = textoExtraido.match(/(BIDMAX|Sistema Informática|[A-Z][a-z]+ [A-Z][a-z]+)/)
+        proposta.ofertante = empresaMatch ? empresaMatch[1] : `Empresa ${i + 1}`
+      }
+      console.log(`[v0] ✓ Ofertante: ${proposta.ofertante}`)
+
+      // Data
+      const dataMatch = textoExtraido.match(/(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/)
+      if (dataMatch) {
+        proposta.data_cotacao = `${dataMatch[1].padStart(2, "0")}/${dataMatch[2].padStart(2, "0")}/${dataMatch[3]}`
+        console.log(`[v0] ✓ Data: ${proposta.data_cotacao}`)
+      }
+
+      // Valor
+      const valorMatches = textoExtraido.match(/R\$\s*([\d.,]+)/g)
+      if (valorMatches && valorMatches.length > 0) {
+        const valores = valorMatches
+          .map((v) => {
+            const num = v.replace(/[^\d,]/g, "").replace(",", ".")
+            return Number.parseFloat(num)
+          })
+          .filter((n) => !isNaN(n))
+
+        if (valores.length > 0) {
+          const maiorValor = Math.max(...valores)
+          proposta.valor = `R$ ${maiorValor.toFixed(2).replace(".", ",")}`
+          console.log(`[v0] ✓ Valor: ${proposta.valor}`)
+        }
+      }
+
+      // Observação
+      const obs = []
+      if (textoExtraido.match(/prazo.*entrega/i)) {
+        const prazoMatch = textoExtraido.match(/prazo.*entrega[:\s]*([^\n.]+)/i)
+        if (prazoMatch) obs.push(`Prazo: ${prazoMatch[1].trim()}`)
+      }
+      if (textoExtraido.match(/garantia/i)) {
+        const garantiaMatch = textoExtraido.match(/garantia[:\s]*([^\n.]+)/i)
+        if (garantiaMatch) obs.push(`Garantia: ${garantiaMatch[1].trim()}`)
+      }
+      proposta.observacao = obs.length > 0 ? obs.join(". ") : "Sem observações"
+
+      propostas.push(proposta)
+      console.log(`[v0] ✓ Proposta ${i + 1} criada com sucesso`)
+    } catch (error) {
+      console.error(`[v0] ✗ Erro ao processar cotação ${i + 1}:`, error.message)
+      propostas.push({
+        ofertante: cotacao.nomeArquivo || `Empresa ${i + 1}`,
+        cnpj: "",
+        data_cotacao: "",
+        valor: "",
+        observacao: `Erro ao processar: ${error.message}`,
       })
     }
   }
 
-  console.log(`[v0] EXTRAÇÃO FINALIZADA`)
-  console.log(`[v0] Total de propostas: ${propostas.length}`)
-  console.log(`[v0] Objeto: ${objetoGlobal || "(não encontrado)"}`)
+  console.log("[v0] ========== EXTRAÇÃO CONCLUÍDA ==========")
+  console.log("[v0] Total de propostas criadas:", propostas.length)
 
-  return {
-    objeto: objetoGlobal || "",
-    propostas: propostas,
-  }
+  return { objeto, propostas }
 }
+// Fim da atualização do código
 
 /* ---- Endpoints diretos (mantidos antes do generateDocsRouter) ---- */
 // FOLHA DE ROSTO
@@ -1923,6 +1814,14 @@ console.log("[server] ========================================")
 console.log("[server] ========================================")
 console.log("[server] 🚀 Iniciando servidor...")
 console.log("[server] ========================================")
+startServer()
+
+startServer()
+
+startServer()
+
+startServer()
+
 startServer()
 
 startServer()
