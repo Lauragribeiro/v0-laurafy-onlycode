@@ -1255,7 +1255,6 @@ async function parseCotacoes(cotacoes = []) {
       })
 
       if (!text) {
-        // Tentar base64
         if (c?.base64) {
           try {
             const b64 = String(c.base64).replace(/^data:.*;base64,/, "")
@@ -1266,7 +1265,6 @@ async function parseCotacoes(cotacoes = []) {
           }
         }
 
-        // Tentar data (pode ser base64 também)
         if (!buffer && c?.data) {
           try {
             const dataStr = String(c.data).replace(/^data:.*;base64,/, "")
@@ -1277,7 +1275,6 @@ async function parseCotacoes(cotacoes = []) {
           }
         }
 
-        // Tentar path
         if (!buffer && c?.path) {
           const possiblePaths = [
             c.path,
@@ -1299,7 +1296,6 @@ async function parseCotacoes(cotacoes = []) {
           }
         }
 
-        // Tentar URL
         if (!buffer && c?.url) {
           try {
             const base = `http://localhost:${process.env.PORT || 3000}`
@@ -1329,7 +1325,6 @@ async function parseCotacoes(cotacoes = []) {
       }
     }
 
-    // Extrair texto do PDF se temos buffer
     if (buffer && buffer.length > 0) {
       console.log("[v0] Extraindo texto do PDF (buffer de", buffer.length, "bytes)...")
       text = await pdfToTextFromBuffer(buffer)
@@ -1346,7 +1341,6 @@ async function parseCotacoes(cotacoes = []) {
       console.log("[v0] ✓ Cotação adicionada com sucesso:", name, "(", text.length, "caracteres )")
     } else {
       console.log("[v0] ⚠ Cotação SEM TEXTO válido:", name)
-      // Adicionar mesmo sem texto para manter o índice correto
       out.push({ name, text: "" })
     }
   }
@@ -1360,318 +1354,205 @@ async function parseCotacoes(cotacoes = []) {
   return out
 }
 
-async function extractFromCotacoesWithAI(cotacoes, instituicao, rubrica) {
-  console.log("[v0] ===== INÍCIO extractFromCotacoesWithAI =====")
-  console.log("[v0] Total de cotações recebidas:", cotacoes?.length || 0)
-  console.log("[v0] Instituição:", instituicao)
-  console.log("[v0] Rubrica:", rubrica)
+async function extractFromCotacoesWithAI(cotacoes, contexto = {}) {
+  console.log("[v0] ========== extractFromCotacoesWithAI ==========")
+  console.log("[v0] Cotações recebidas:", cotacoes?.length || 0)
+  console.log("[v0] Contexto:", JSON.stringify(contexto, null, 2))
 
-  if (!Array.isArray(cotacoes) || cotacoes.length === 0) {
-    console.warn("[v0] Nenhuma cotação para processar")
-    return { objeto: rubrica || "", propostas: [] }
+  const { instituicao = "", rubrica = "" } = contexto
+
+  if (!cotacoes || cotacoes.length === 0) {
+    console.warn("[v0] ❌ Nenhuma cotação fornecida")
+    return { objeto: rubrica || "Objeto não especificado", propostas: [] }
   }
 
-  async function lerConteudoPDF(cotacao, index) {
-    console.log(`[v0] ====== LENDO COTAÇÃO ${index + 1} ======`)
-    console.log(`[v0] Objeto cotação:`, {
-      name: cotacao.nomeArquivo || cotacao.name,
-      path: cotacao.path,
-      url: cotacao.url,
-      hasContent: !!cotacao.conteudo,
-    })
+  // Extrair texto de cada cotação
+  const textos = []
+  for (let i = 0; i < cotacoes.length; i++) {
+    const cot = cotacoes[i]
+    console.log(`\n[v0] === Processando cotação ${i + 1}/${cotacoes.length} ===`)
 
-    let textContent = ""
+    let texto = ""
+    let buffer = null
 
-    // Estratégia 1: Conteúdo já existe
-    if (cotacao.conteudo && typeof cotacao.conteudo === "string" && cotacao.conteudo.length > 50) {
-      console.log(`[v0] ✓ Usando conteúdo existente (${cotacao.conteudo.length} chars)`)
-      return cotacao.conteudo
+    // Estratégia 1: Path no filesystem
+    if (cot.path && fs.existsSync(cot.path)) {
+      try {
+        buffer = fs.readFileSync(cot.path)
+        console.log(`[v0] ✓ Lido do path: ${cot.path} (${buffer.length} bytes)`)
+      } catch (err) {
+        console.log(`[v0] ✗ Erro ao ler path:`, err.message)
+      }
     }
 
-    // Estratégia 2: Ler do arquivo
-    const nomeArquivo = cotacao.nomeArquivo || cotacao.name || cotacao.filename || `cotacao${index + 1}.pdf`
-    const possiblePaths = [
-      cotacao.path,
-      cotacao.filePath,
-      join(UPLOADS_DIR, nomeArquivo),
-      join(__dirname, "data", "uploads", nomeArquivo),
-    ].filter(Boolean)
+    // Estratégia 2: Nome do arquivo em uploads/
+    if (!buffer && (cot.name || cot.filename)) {
+      const fname = cot.name || cot.filename
+      const paths = [
+        join(UPLOADS_DIR, fname),
+        join(__dirname, "data", "uploads", fname),
+        join(process.cwd(), "data", "uploads", fname),
+      ]
 
-    console.log(`[v0] Testando ${possiblePaths.length} paths...`)
-
-    for (const filepath of possiblePaths) {
-      try {
-        if (fs.existsSync(filepath)) {
-          console.log(`[v0] ✓ Arquivo encontrado: ${filepath}`)
-          const stats = fs.statSync(filepath)
-          console.log(`[v0] Tamanho: ${stats.size} bytes`)
-
-          const buffer = fs.readFileSync(filepath)
-
-          // Verificar se é PDF pelos magic bytes
-          const isPDF = buffer.length > 4 && buffer.toString("ascii", 0, 4) === "%PDF"
-
-          if (isPDF) {
-            console.log(`[v0] Detectado como PDF, usando pdf-parse...`)
-            const pdfParse = (await import("pdf-parse")).default
-            const pdfData = await pdfParse(buffer)
-            textContent = pdfData.text
-            console.log(`[v0] ✓ PDF parseado: ${textContent.length} caracteres extraídos`)
-          } else {
-            console.log(`[v0] Detectado como texto, lendo diretamente...`)
-            textContent = buffer.toString("utf-8")
-            console.log(`[v0] ✓ Texto lido: ${textContent.length} caracteres`)
-          }
-
-          if (textContent.length > 50) {
-            console.log(`[v0] ✅ Conteúdo extraído com sucesso!`)
-            console.log(`[v0] Primeiros 200 chars: ${textContent.substring(0, 200)}...`)
-            return textContent
+      for (const p of paths) {
+        if (fs.existsSync(p)) {
+          try {
+            buffer = fs.readFileSync(p)
+            console.log(`[v0] ✓ Lido de uploads: ${p} (${buffer.length} bytes)`)
+            break
+          } catch (err) {
+            console.log(`[v0] ✗ Erro ao ler ${p}:`, err.message)
           }
         }
-      } catch (err) {
-        console.error(`[v0] ⚠️ Erro ao processar ${filepath}:`, err.message)
       }
     }
 
-    console.warn(`[v0] ⚠️ Não foi possível ler conteúdo da cotação ${index + 1}`)
-    return ""
-  }
+    // Estratégia 3: Base64 no campo data
+    if (!buffer && cot.data) {
+      try {
+        let b64 = cot.data
+        if (b64.includes(",")) b64 = b64.split(",")[1]
+        buffer = Buffer.from(b64, "base64")
+        console.log(`[v0] ✓ Decodificado base64 (${buffer.length} bytes)`)
+      } catch (err) {
+        console.log(`[v0] ✗ Erro ao decodificar base64:`, err.message)
+      }
+    }
 
-  console.log("[v0] Iniciando leitura das cotações...")
-  const blocks = []
+    // Extrair texto do buffer
+    if (buffer && buffer.length > 0) {
+      const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
+      console.log(`[v0] Tipo detectado: ${isPDF ? "PDF" : "Texto"}`)
 
-  for (let i = 0; i < cotacoes.length; i++) {
-    const text = await lerConteudoPDF(cotacoes[i], i)
-    if (text && text.length > 50) {
-      blocks.push(`=== COTAÇÃO ${i + 1} ===\n${text}`)
-      console.log(`[v0] ✓ Cotação ${i + 1} adicionada ao bloco (${text.length} chars)`)
+      if (isPDF) {
+        try {
+          const pdfParse = (await import("pdf-parse")).default
+          const data = await pdfParse(buffer)
+          texto = data.text || ""
+          console.log(`[v0] ✓ PDF parseado: ${texto.length} caracteres`)
+        } catch (err) {
+          console.log(`[v0] ✗ Erro ao parsear PDF:`, err.message)
+        }
+      } else {
+        texto = buffer.toString("utf-8")
+        console.log(`[v0] ✓ Texto extraído: ${texto.length} caracteres`)
+      }
+    }
+
+    if (texto && texto.length > 50) {
+      textos.push({ index: i + 1, texto })
+      console.log(`[v0] ✅ Cotação ${i + 1}: ${texto.length} caracteres extraídos`)
     } else {
-      console.warn(`[v0] ⚠️ Cotação ${i + 1} sem conteúdo suficiente`)
+      console.log(`[v0] ⚠️ Cotação ${i + 1}: SEM TEXTO suficiente`)
     }
   }
 
-  console.log(`[v0] Total de blocos de texto: ${blocks.length}`)
+  console.log(`\n[v0] === Resumo da extração ===`)
+  console.log(`[v0] Total processadas: ${cotacoes.length}`)
+  console.log(`[v0] Com texto: ${textos.length}`)
+  console.log(`[v0] Sem texto: ${cotacoes.length - textos.length}`)
 
-  if (blocks.length === 0) {
-    console.error("[v0] ❌ NENHUM TEXTO EXTRAÍDO DAS COTAÇÕES!")
-    return {
-      objeto: rubrica || "Objeto não especificado",
-      propostas: [],
-    }
+  if (textos.length === 0) {
+    console.error("[v0] ❌ ERRO CRÍTICO: Nenhum texto extraído de nenhuma cotação!")
+    return { objeto: rubrica || "Objeto não especificado", propostas: [] }
   }
 
-  const promptCompleto = `Você é um assistente especializado em extração de dados de propostas comerciais brasileiras.
+  // Montar prompt para OpenAI
+  const blocos = textos.map((t) => `\n\n=== COTAÇÃO ${t.index} ===\n${t.texto}`).join("\n")
 
-**SUA TAREFA:** Analisar as cotações abaixo e extrair informações estruturadas.
+  const prompt = `Você é um especialista em análise de propostas comerciais brasileiras.
 
-**INSTRUÇÕES DETALHADAS:**
+TAREFA: Extrair informações estruturadas das cotações abaixo.
 
-1. **objeto** (string): Descrição do produto/serviço sendo cotado
-   - Procure por: "ITEM", "DESCRIÇÃO", especificações técnicas, nome do produto
-   - Exemplo: "Notebook Latitude 5450 - Intel Core Ultra 5, 16GB RAM, 256GB SSD"
-   - Se não encontrar: use o valor da rubrica "${rubrica || "Objeto não especificado"}"
+REGRAS:
+1. objeto: Descrição do produto/serviço (ex: "Notebook Latitude 5450")
+2. propostas: Array com 1 item POR cotação
+   - selecao: "Cotação 1", "Cotação 2", etc
+   - ofertante: Nome da empresa (ex: "BIDMAX Soluções")
+   - cnpj_ofertante: CNPJ formatado (ex: "43.202.033/0001-27")
+   - data_cotacao: Data DD/MM/YYYY (ex: "05/06/2025")
+   - valor: Valor total R$ X.XXX,XX (ex: "R$ 8.579,00")
+   - observacao: Prazo, garantia, etc
 
-2. **propostas** (array): CRIE UM ITEM PARA CADA COTAÇÃO
-
-   Para cada cotação, extraia:
-
-   a) **selecao** (string): ID único sequencial
-      - Formato: "Cotação 1", "Cotação 2", "Cotação 3"
-      - NUNCA repita IDs
-
-   b) **ofertante** (string): Nome da empresa fornecedora
-      - Procure por: cabeçalho, rodapé, "Proposta:", razão social
-      - Exemplos: "BIDMAX Soluções Corporativas", "Sistema Informática", "Dell"
-      - Padrão: "Fornecedor não identificado"
-
-   c) **cnpj_ofertante** (string): CNPJ no formato XX.XXX.XXX/XXXX-XX
-      - Procure por: "CNPJ:", rodapé, após o nome da empresa
-      - Exemplo: "43.202.033/0001-27"
-      - Padrão: "Não informado"
-
-   d) **data_cotacao** (string): Data no formato DD/MM/YYYY
-      - Procure por: topo do documento, "Data:", cabeçalho
-      - Exemplo: "05/06/2025"
-      - Padrão: data de hoje
-
-   e) **valor** (string): Valor TOTAL formatado R$ X.XXX,XX
-      - SEMPRE com R$, ponto para milhares, vírgula para decimais
-      - Procure por: "Total", "Valor", linha final de preço
-      - Se houver quantidade, MULTIPLIQUE (qtd × valor unitário)
-      - Exemplo: "R$ 8.579,00" ou "R$ 181.948,00"
-      - Padrão: "R$ 0,00"
-
-   f) **observacao** (string): Informações adicionais
-      - Inclua: prazo, pagamento, garantia
-      - Exemplo: "Prazo: 20-30 dias. Garantia: 2 anos"
-      - Padrão: ""
-
-**REGRAS CRÍTICAS:**
-- CADA cotação = UM item no array propostas
-- NUNCA use undefined ou null
-- Use valores padrão se não encontrar dados
+IMPORTANTE:
+- Use valores padrão se não encontrar
+- NUNCA use null ou undefined
 - Mantenha formatação exata
 
-**COTAÇÕES:**
+COTAÇÕES:
+${blocos}
 
-${blocks.join("\n\n")}
+Retorne JSON puro sem texto extra.`
 
-Retorne APENAS JSON válido, sem texto extra.`
+  console.log(`\n[v0] === Chamando OpenAI ===`)
+  console.log(`[v0] Tamanho do prompt: ${prompt.length} caracteres`)
 
-  console.log("[v0] ========== CHAMANDO OPENAI ==========")
-  console.log(`[v0] Tamanho do prompt: ${promptCompleto.length} caracteres`)
+  try {
+    if (!openai) {
+      throw new Error("Cliente OpenAI não inicializado. Verifique OPENAI_API_KEY.")
+    }
 
-  const maxRetries = 3
-  let lastError = null
-
-  for (let tentativa = 1; tentativa <= maxRetries; tentativa++) {
-    try {
-      console.log(`[v0] Tentativa ${tentativa}/${maxRetries}`)
-
-      if (!process.env.OPENAI_API_KEY) {
-        throw new Error("❌ OPENAI_API_KEY não configurada nas variáveis de ambiente")
-      }
-
-      const resp = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Você é um assistente especializado em análise de propostas comerciais brasileiras. Extraia informações de forma precisa e estruturada.",
-          },
-          {
-            role: "user",
-            content: promptCompleto,
-          },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "cotacao_mapa",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                objeto: {
-                  type: "string",
-                  description: "Descrição completa do objeto/produto sendo cotado",
-                },
-                propostas: {
-                  type: "array",
-                  description: "Array com todas as propostas extraídas das cotações",
-                  items: {
-                    type: "object",
-                    properties: {
-                      selecao: {
-                        type: "string",
-                        description: "Identificação sequencial da proposta",
-                      },
-                      ofertante: {
-                        type: "string",
-                        description: "Nome completo do fornecedor",
-                      },
-                      cnpj_ofertante: {
-                        type: "string",
-                        description: "CNPJ formatado XX.XXX.XXX/XXXX-XX",
-                      },
-                      data_cotacao: {
-                        type: "string",
-                        description: "Data no formato DD/MM/YYYY",
-                      },
-                      valor: {
-                        type: "string",
-                        description: "Valor total formatado R$ X.XXX,XX",
-                      },
-                      observacao: {
-                        type: "string",
-                        description: "Observações sobre prazo, pagamento e garantia",
-                      },
-                    },
-                    required: ["selecao", "ofertante", "cnpj_ofertante", "data_cotacao", "valor", "observacao"],
-                    additionalProperties: false,
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Você extrai dados de propostas comerciais brasileiras com precisão." },
+        { role: "user", content: prompt },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "cotacao_mapa",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              objeto: { type: "string" },
+              propostas: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    selecao: { type: "string" },
+                    ofertante: { type: "string" },
+                    cnpj_ofertante: { type: "string" },
+                    data_cotacao: { type: "string" },
+                    valor: { type: "string" },
+                    observacao: { type: "string" },
                   },
+                  required: ["selecao", "ofertante", "cnpj_ofertante", "data_cotacao", "valor", "observacao"],
+                  additionalProperties: false,
                 },
               },
-              required: ["objeto", "propostas"],
-              additionalProperties: false,
             },
+            required: ["objeto", "propostas"],
+            additionalProperties: false,
           },
         },
-        temperature: 0.1,
-      })
+      },
+      temperature: 0.1,
+    })
 
-      console.log("[v0] ✅ OpenAI respondeu com sucesso!")
+    const conteudo = response.choices[0].message.content
+    console.log(`[v0] ✅ OpenAI respondeu (${conteudo.length} chars)`)
 
-      const raw = resp.choices?.[0]?.message?.content || "{}"
-      console.log("[v0] Resposta OpenAI (primeiros 300 chars):", raw.substring(0, 300))
+    const resultado = JSON.parse(conteudo)
+    console.log(`[v0] ✅ JSON parseado com sucesso`)
+    console.log(`[v0] Objeto: "${resultado.objeto}"`)
+    console.log(`[v0] Propostas: ${resultado.propostas?.length || 0}`)
 
-      let data
-      try {
-        data = JSON.parse(raw)
-        console.log("[v0] ✅ JSON parseado com sucesso")
-      } catch (parseErr) {
-        console.error("[v0] ❌ Erro ao parsear JSON:", parseErr.message)
-        throw parseErr
-      }
-
-      const objeto = data.objeto || rubrica || "Objeto não especificado"
-      const propostas = Array.isArray(data.propostas)
-        ? data.propostas.map((p, idx) => ({
-            selecao: p.selecao || `Cotação ${idx + 1}`,
-            ofertante: p.ofertante || "Não informado",
-            cnpj_ofertante: p.cnpj_ofertante || "Não informado",
-            data_cotacao: p.data_cotacao || new Date().toLocaleDateString("pt-BR"),
-            valor: p.valor || "R$ 0,00",
-            observacao: p.observacao || "",
-          }))
-        : []
-
-      console.log("[v0] ========== RESULTADO FINAL ==========")
-      console.log(`[v0] Objeto: ${objeto}`)
-      console.log(`[v0] Total de propostas: ${propostas.length}`)
-      propostas.forEach((p, i) => {
-        console.log(`[v0] Proposta ${i + 1}:`, {
-          selecao: p.selecao,
-          ofertante: p.ofertante,
-          cnpj: p.cnpj_ofertante,
-          data: p.data_cotacao,
-          valor: p.valor,
-        })
-      })
-      console.log("[v0] ======================================")
-
-      return { objeto, propostas }
-    } catch (err) {
-      lastError = err
-      console.error(`[v0] ❌ Erro na tentativa ${tentativa}:`, err.message)
-
-      if (err.status === 401 || err.message?.includes("401")) {
-        console.error("[v0] 🔑 ERRO 401: Chave da OpenAI inválida ou expirada!")
-        console.error("[v0] Verifique a variável OPENAI_API_KEY nas configurações do projeto")
-        break
-      }
-
-      if (err.status === 400 || err.message?.includes("Invalid schema")) {
-        console.error("[v0] 📋 ERRO 400: Schema malformado!")
-        console.error("[v0] Detalhes:", err.message)
-        break
-      }
-
-      if (tentativa < maxRetries) {
-        console.log(`[v0] Aguardando 2s antes da próxima tentativa...`)
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-      }
+    return {
+      objeto: resultado.objeto || rubrica || "Objeto não especificado",
+      propostas: resultado.propostas || [],
     }
-  }
+  } catch (err) {
+    console.error("[v0] ❌ Erro ao chamar OpenAI:", err.message)
 
-  console.error("[v0] ❌ Todas as tentativas falharam")
-  console.error("[v0] Último erro:", lastError?.message)
+    if (err.status === 401) {
+      console.error("[v0] 🔑 ERRO 401: Chave OpenAI inválida!")
+      console.error("[v0] Configure OPENAI_API_KEY nas variáveis de ambiente")
+    }
 
-  return {
-    objeto: rubrica || "Objeto não especificado",
-    propostas: [],
+    return { objeto: rubrica || "Objeto não especificado", propostas: [] }
   }
 }
 
