@@ -24,7 +24,7 @@ import parseDocsRouter, { extractPurchaseDocData } from "./src/parseDocs.js"
 import vendorsRouter from "./src/vendors.js"
 // import purchasesRouter               from "./src/purchases.js"; // ⇐ NÃO usar (router interno abaixo)
 import { registerDocRoutes } from "./src/generateDocs.js"
-import { ensureOpenAIClient, hasOpenAIKey, invalidateOpenAIClient } from "./src/openaiProvider.js"
+import { ensureOpenAIClient, hasOpenAIKey } from "./src/openaiProvider.js"
 import cnpjProxyRouter from "./src/cnpjProxy.js"
 
 // __dirname helpers (ESM)
@@ -355,7 +355,7 @@ function parsePropostasList(body = {}) {
 
     const selecaoRaw = toStringSafe(item.selecao ?? (item.selecionada ? "SELECIONADA" : ""))
     const ofertante = toStringSafe(item.ofertante ?? item.fornecedor ?? item.nome)
-    const doc = maskDocBR(item.cnpj ?? item.cnpj_ofertante ?? item.cnpjCpf ?? item.cnpj_cpf ?? item.cpf)
+    const doc = maskDocBR(item.cnpj ?? item.cnpj_ofertante ?? item.cnpj_cpf ?? item.cnpjCpf ?? item.cpf)
     const dataISO = normalizeDate(
       item.dataCotacao ?? item.data_cotacao ?? item.data ?? item.dataCotacaoISO ?? item.data_cotacao_iso,
     )
@@ -1360,61 +1360,199 @@ async function parseCotacoes(cotacoes = []) {
   return out
 }
 
-async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotacoes = [] } = {}) {
-  console.log("[v0] extractFromCotacoesWithAI iniciado")
-  console.log("[v0] Parâmetros:", {
-    instituicao,
-    rubrica,
-    has_lista_cotacoes: cotacoes?.length > 0,
-    cotacoes_arquivos_count: cotacoes?.length || 0,
-  })
+async function extractFromCotacoesWithAI(cotacoes, instituicao, rubrica) {
+  console.log("[v0] ===== INÍCIO extractFromCotacoesWithAI =====")
+  console.log("[v0] Total de cotações recebidas:", cotacoes?.length || 0)
+  console.log("[v0] Instituição:", instituicao)
+  console.log("[v0] Rubrica:", rubrica)
 
-  if (!hasOpenAI) {
-    console.log("[v0] OpenAI não configurado, retornando vazio")
-    return { objeto: "", propostas: [] }
+  if (!Array.isArray(cotacoes) || cotacoes.length === 0) {
+    console.warn("[v0] Nenhuma cotação para processar")
+    return { objeto: rubrica || "", propostas: [] }
   }
 
-  console.log("[v0] requireClient: Verificando cliente OpenAI...")
+  async function lerConteudoPDF(cotacao, index) {
+    console.log(`[v0] ====== LENDO COTAÇÃO ${index + 1} ======`)
+    console.log(`[v0] Nome arquivo: ${cotacao.nomeArquivo || "sem nome"}`)
+    console.log(`[v0] Tipo mime: ${cotacao.mimeType || "não especificado"}`)
 
-  const MAX_TENTATIVAS = 3
+    let textContent = ""
+
+    // Estratégia 1: Se já tem conteúdo texto
+    if (cotacao.conteudo && typeof cotacao.conteudo === "string" && cotacao.conteudo.length > 50) {
+      console.log(`[v0] Cotação ${index + 1}: Usando conteúdo texto existente (${cotacao.conteudo.length} chars)`)
+      return cotacao.conteudo
+    }
+
+    // Estratégia 2: Ler de arquivo no sistema
+    const possiblePaths = [
+      cotacao.filePath,
+      cotacao.path,
+      cotacao.url,
+      path.join(__dirname, "uploads", cotacao.nomeArquivo || ""),
+      path.join(__dirname, "public", "uploads", cotacao.nomeArquivo || ""),
+    ].filter(Boolean)
+
+    console.log(`[v0] Cotação ${index + 1}: Tentando ${possiblePaths.length} caminhos possíveis`)
+
+    for (const p of possiblePaths) {
+      try {
+        if (fs.existsSync(p)) {
+          console.log(`[v0] Cotação ${index + 1}: Arquivo encontrado em: ${p}`)
+          const buffer = fs.readFileSync(p)
+          console.log(`[v0] Cotação ${index + 1}: Buffer lido com ${buffer.length} bytes`)
+
+          if (cotacao.mimeType?.includes("pdf") || p.endsWith(".pdf")) {
+            console.log(`[v0] Cotação ${index + 1}: Processando como PDF`)
+            const pdfParse = (await import("pdf-parse")).default
+            const pdfData = await pdfParse(buffer)
+            textContent = pdfData.text || ""
+            console.log(`[v0] Cotação ${index + 1}: Texto extraído do PDF: ${textContent.length} chars`)
+            console.log(`[v0] Cotação ${index + 1}: Primeiros 200 chars: ${textContent.substring(0, 200)}`)
+            return textContent
+          } else {
+            textContent = buffer.toString("utf-8")
+            console.log(`[v0] Cotação ${index + 1}: Texto extraído (não-PDF): ${textContent.length} chars`)
+            return textContent
+          }
+        }
+      } catch (err) {
+        console.log(`[v0] Cotação ${index + 1}: Erro ao ler ${p}:`, err.message)
+      }
+    }
+
+    // Estratégia 3: Decodificar base64 se presente
+    if (cotacao.data && typeof cotacao.data === "string") {
+      try {
+        console.log(`[v0] Cotação ${index + 1}: Tentando decodificar base64 (${cotacao.data.length} chars)`)
+        const base64Data = cotacao.data.includes(",") ? cotacao.data.split(",")[1] : cotacao.data
+        const buffer = Buffer.from(base64Data, "base64")
+        console.log(`[v0] Cotação ${index + 1}: Buffer decodificado: ${buffer.length} bytes`)
+
+        if (cotacao.mimeType?.includes("pdf")) {
+          const pdfParse = (await import("pdf-parse")).default
+          const pdfData = await pdfParse(buffer)
+          textContent = pdfData.text || ""
+          console.log(`[v0] Cotação ${index + 1}: Texto do PDF base64: ${textContent.length} chars`)
+          return textContent
+        } else {
+          textContent = buffer.toString("utf-8")
+          console.log(`[v0] Cotação ${index + 1}: Texto do base64: ${textContent.length} chars`)
+          return textContent
+        }
+      } catch (err) {
+        console.log(`[v0] Cotação ${index + 1}: Erro ao decodificar base64:`, err.message)
+      }
+    }
+
+    console.warn(`[v0] Cotação ${index + 1}: ⚠️ NÃO FOI POSSÍVEL EXTRAIR CONTEÚDO`)
+    return ""
+  }
+
+  // Ler todas as cotações
+  const blocks = []
+  for (let i = 0; i < cotacoes.length; i++) {
+    const texto = await lerConteudoPDF(cotacoes[i], i)
+    if (texto && texto.length > 20) {
+      blocks.push(`=== COTAÇÃO ${i + 1} ===\n${texto}`)
+      console.log(`[v0] ✓ Cotação ${i + 1} adicionada aos blocos (${texto.length} chars)`)
+    } else {
+      console.warn(`[v0] ✗ Cotação ${i + 1} IGNORADA (conteúdo vazio ou muito pequeno)`)
+    }
+  }
+
+  console.log(`[v0] Total de blocos de texto extraídos: ${blocks.length}`)
+
+  if (blocks.length === 0) {
+    console.error("[v0] ❌ NENHUM TEXTO EXTRAÍDO DAS COTAÇÕES")
+    return { objeto: rubrica || "", propostas: [] }
+  }
+
+  // Prompt extremamente detalhado e efetivo
+  const promptCompleto = `Você é um assistente especializado em análise de cotações e propostas comerciais.
+
+TAREFA: Analise as ${blocks.length} cotações fornecidas e extraia as informações estruturadas.
+
+CONTEXTO DO PROJETO:
+- Instituição: ${instituicao || "Não especificada"}
+- Rubrica/Natureza: ${rubrica || "Não especificada"}
+
+INSTRUÇÕES DE EXTRAÇÃO:
+
+1. OBJETO DA COTAÇÃO:
+   - Identifique o PRODUTO ou SERVIÇO que está sendo cotado
+   - Seja específico: modelo, marca, especificações principais
+   - Exemplo: "Notebook Dell Latitude 5450 - Intel Core Ultra 5, 16GB RAM, SSD 256GB, Tela 14" FHD, Windows 11 Pro"
+   - Se houver múltiplos produtos similares, descreva o mais detalhado
+
+2. PARA CADA COTAÇÃO, EXTRAIA:
+   
+   a) SELEÇÃO: 
+      - Identificador único: "Cotação 1", "Cotação 2", "Cotação 3", etc.
+   
+   b) OFERTANTE (Nome do Fornecedor):
+      - Procure por: "Razão Social", "Cliente", "Fornecedor", nome da empresa no cabeçalho
+      - Exemplos: "Dell Computadores do Brasil Ltda", "BIDMAX Soluções Corporativas", "Sistema Informática"
+   
+   c) CNPJ/CPF DO OFERTANTE:
+      - Formato: XX.XXX.XXX/XXXX-XX para CNPJ ou XXX.XXX.XXX-XX para CPF
+      - Procure por: "CNPJ:", "CNPJ do Fornecedor", números no rodapé
+   
+   d) DATA DA COTAÇÃO:
+      - Formato de saída: DD/MM/YYYY
+      - Procure por: data no topo do documento, "Data:", data da proposta
+      - Se não encontrar, use a data atual do sistema
+   
+   e) VALOR:
+      - Formato: R$ X.XXX,XX (com símbolo R$, ponto para milhares, vírgula para centavos)
+      - Procure por: "Total", "Valor Total", "Preço", "Subtotal", "Valor unitário"
+      - Se houver quantidade, multiplique pelo valor unitário
+      - Exemplos: R$ 8.579,00 ou R$ 8.272,16
+   
+   f) OBSERVAÇÃO:
+      - Informações adicionais relevantes
+      - Prazo de entrega, condições de pagamento, garantia
+      - Exemplo: "Prazo: 20-30 dias. Pagamento: Boleto ou Cartão 6x. Garantia: 2 anos"
+
+IMPORTANTE:
+- Cada cotação deve ser um item separado no array "propostas"
+- NUNCA deixe campos obrigatórios vazios - use "Não informado" se necessário
+- Se o valor não estiver explícito, procure por preços de itens individuais
+- Mantenha consistência nos formatos (CNPJ, Data, Valor)
+
+COTAÇÕES PARA ANÁLISE:
+
+${blocks.join("\n\n")}
+
+Retorne APENAS o JSON estruturado conforme o schema, sem texto adicional.`
+
+  console.log("[v0] ========== CHAMANDO OPENAI ==========")
+  console.log("[v0] Tamanho do prompt:", promptCompleto.length, "caracteres")
+  console.log("[v0] Primeiros 500 chars do prompt:")
+  console.log(promptCompleto.substring(0, 500))
+
+  const maxRetries = 3
   let lastError = null
 
-  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+  for (let tentativa = 1; tentativa <= maxRetries; tentativa++) {
     try {
-      console.log("[v0] Tentativa", tentativa + "/" + MAX_TENTATIVAS)
+      console.log(`[v0] 🔄 Tentativa ${tentativa}/${maxRetries} de chamada à OpenAI`)
 
-      const client = ensureOpenAIClient()
-      if (!client) {
-        console.log("[v0] Cliente OpenAI não disponível")
-        return { objeto: "", propostas: [] }
-      }
-      console.log("[v0] requireClient: Cliente obtido: true")
-      console.log("[v0] ✓ Cliente OpenAI pronto para extração")
-      console.log("[v0] Calling OpenAI API for extraction...")
-
-      const blocks = (cotacoes || [])
-        .map((c, idx) => {
-          const name = c?.name || c?.filename || c?.fileName || `Cotacao_${idx + 1}`
-          const text = String(c?.text || "").slice(0, 20000)
-          return `### COTAÇÃO ${idx + 1} (${name})\n${text}`
-        })
-        .filter(Boolean)
-
-      if (!blocks.length) {
-        console.log("[v0] Nenhum bloco de texto para processar")
-        return { objeto: "", propostas: [] }
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error("❌ OPENAI_API_KEY não configurada! Verifique suas variáveis de ambiente.")
       }
 
-      const resp = await client.chat.completions.create({
+      const resp = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: "Você extrai dados estruturados de cotações comerciais e responde em JSON válido.",
+            content:
+              "Você é um assistente especializado em análise de propostas comerciais e cotações. Extraia informações estruturadas de documentos de forma precisa e completa.",
           },
           {
             role: "user",
-            content: `Instituição: ${instituicao || ""}\nRubrica: ${rubrica || ""}\n\nAnalise as cotações a seguir e extraia:\n- objeto: descrição do que está sendo cotado\n- propostas: array com dados de cada fornecedor (selecao, ofertante, cnpj_ofertante, data_cotacao, valor, observacao)\n\n${blocks.join("\n\n")}`,
+            content: promptCompleto,
           },
         ],
         response_format: {
@@ -1427,19 +1565,19 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
               properties: {
                 objeto: {
                   type: "string",
-                  description: "Descrição do objeto da cotação",
+                  description: "Descrição completa e detalhada do objeto/produto sendo cotado",
                 },
                 propostas: {
                   type: "array",
                   items: {
                     type: "object",
                     properties: {
-                      selecao: { type: "string", description: "Identificação da proposta (ex: Cotação 1)" },
-                      ofertante: { type: "string", description: "Nome do fornecedor/ofertante" },
-                      cnpj_ofertante: { type: "string", description: "CNPJ ou CPF do ofertante" },
+                      selecao: { type: "string", description: "Identificação da proposta (ex: Cotação 1, Cotação 2)" },
+                      ofertante: { type: "string", description: "Nome completo do fornecedor/empresa" },
+                      cnpj_ofertante: { type: "string", description: "CNPJ formatado XX.XXX.XXX/XXXX-XX ou CPF" },
                       data_cotacao: { type: "string", description: "Data da cotação no formato DD/MM/YYYY" },
-                      valor: { type: "string", description: "Valor da cotação formatado como R$ X.XXX,XX" },
-                      observacao: { type: "string", description: "Observações adicionais sobre a proposta" },
+                      valor: { type: "string", description: "Valor formatado como R$ X.XXX,XX" },
+                      observacao: { type: "string", description: "Observações sobre prazo, pagamento, garantia, etc." },
                     },
                     required: ["selecao", "ofertante", "cnpj_ofertante", "data_cotacao", "valor", "observacao"],
                     additionalProperties: false,
@@ -1451,280 +1589,82 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
             },
           },
         },
-        temperature: 0.2,
+        temperature: 0.1,
       })
 
+      console.log("[v0] ✅ OpenAI respondeu com sucesso!")
+
       const raw = resp.choices?.[0]?.message?.content || "{}"
+      console.log("[v0] Resposta raw da OpenAI:", raw.substring(0, 500))
 
       let data
       try {
         data = JSON.parse(raw)
-      } catch {
-        data = {}
+        console.log("[v0] ✅ JSON parseado com sucesso")
+        console.log("[v0] Objeto extraído:", data.objeto)
+        console.log("[v0] Número de propostas extraídas:", data.propostas?.length || 0)
+      } catch (parseErr) {
+        console.error("[v0] ❌ Erro ao parsear JSON:", parseErr.message)
+        throw parseErr
       }
 
-      const objeto = typeof data.objeto === "string" ? data.objeto.trim() : ""
+      const objeto = typeof data.objeto === "string" ? data.objeto.trim() : rubrica || ""
       const propostas = Array.isArray(data.propostas)
         ? data.propostas.map((p, idx) => ({
             selecao: p.selecao || `Cotação ${idx + 1}`,
-            ofertante: p.ofertante || "",
-            cnpj_ofertante: p.cnpj_ofertante || p.cnpj || "",
-            data_cotacao: p.data_cotacao || p.dataCotacao || p.data || "",
-            valor: p.valor || p.valorBR || "",
-            observacao: p.observacao || "", // Adicionado observacao
+            ofertante: p.ofertante || "Não informado",
+            cnpj_ofertante: p.cnpj_ofertante || p.cnpj || "Não informado",
+            data_cotacao: p.data_cotacao || p.dataCotacao || p.data || new Date().toLocaleDateString("pt-BR"),
+            valor: p.valor || p.valorBR || "R$ 0,00",
+            observacao: p.observacao || "",
           }))
         : []
 
-      console.log("[v0] ✅ IA extraiu com sucesso:", { objeto, propostas_count: propostas.length })
+      console.log("[v0] ========== RESULTADO FINAL ==========")
+      console.log("[v0] Objeto:", objeto)
+      console.log("[v0] Total de propostas processadas:", propostas.length)
+      propostas.forEach((p, i) => {
+        console.log(`[v0] Proposta ${i + 1}:`, {
+          selecao: p.selecao,
+          ofertante: p.ofertante,
+          cnpj: p.cnpj_ofertante,
+          valor: p.valor,
+        })
+      })
+
       return { objeto, propostas }
     } catch (err) {
       lastError = err
-      const code = err?.status || err?.statusCode || err?.code
-      const msg = String(err?.message || "").toLowerCase()
+      console.error(`[v0] ❌ Tentativa ${tentativa} falhou:`, err.message)
 
-      console.error(`[v0] Erro na tentativa ${tentativa}:`, {
-        code,
-        message: err?.message,
-        error: err?.error?.message || err?.error,
-      })
-
-      if (code === 401 || code === "401" || msg.includes("incorrect api key") || msg.includes("invalid api key")) {
-        console.log("[v0] ❌ Chave da OpenAI inválida ou expirada (erro 401). Verifique a chave na seção 'Vars' do v0.")
-        console.log("[v0] Invalidando cliente OpenAI (será recriado na próxima chamada)")
-        invalidateOpenAIClient()
-        // Não tenta novamente se for erro de autenticação
-        break
+      if (err.message?.includes("401")) {
+        console.error("[v0] ❌ ERRO 401: Chave da OpenAI inválida ou expirada!")
+        console.error("[v0] ⚠️ Verifique a variável OPENAI_API_KEY no ambiente")
+        break // Não adianta tentar novamente com chave inválida
       }
 
-      if (code === 400 || code === "400") {
-        console.log(`[v0] ❌ Erro na requisição OpenAI (erro 400): ${err?.message || "Schema inválido"}`)
-        // Não tenta novamente se for erro de schema
-        break
+      if (err.message?.includes("400") && err.message?.includes("schema")) {
+        console.error("[v0] ❌ ERRO 400: Schema JSON inválido!")
+        console.error("[v0] Detalhes do erro:", err.message)
       }
 
-      if (tentativa < MAX_TENTATIVAS) {
-        console.log(`[v0] Aguardando antes da próxima tentativa...`)
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+      if (tentativa < maxRetries) {
+        const delay = tentativa * 1000
+        console.log(`[v0] ⏳ Aguardando ${delay}ms antes da próxima tentativa...`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
       }
     }
   }
 
-  console.log("[v0] ❌ Todas as", MAX_TENTATIVAS, "tentativas falharam")
-  console.warn("[v0] extractFromCotacoesWithAI falhou:", lastError?.message || lastError)
-  return { objeto: "", propostas: [] }
-}
+  // Se todas as tentativas falharam
+  console.error("[v0] ❌ TODAS AS TENTATIVAS FALHARAM")
+  console.error("[v0] Último erro:", lastError?.message || "Desconhecido")
+  console.error("[v0] ⚠️ Retornando dados vazios como fallback")
 
-async function extractCotacoesFromFiles(cotacoes = [], { instituicao = "", rubrica = "" } = {}) {
-  console.log("[v0] extractCotacoesFromFiles - Iniciando extração de cotações")
-  console.log("[v0] Número de cotações recebidas:", cotacoes?.length || 0)
-
-  const parsed = await parseCotacoes(cotacoes)
-  console.log("[v0] Cotações parseadas:", parsed.length)
-
-  if (!parsed.length) {
-    console.log("[v0] Nenhuma cotação foi parseada com sucesso")
-    return { objeto: "", propostas: [] }
+  return {
+    objeto: rubrica || "Objeto não identificado",
+    propostas: [],
   }
-
-  let aiResult = { objeto: "", propostas: [] }
-  let usedAI = false
-
-  try {
-    console.log("[v0] Tentando extrair dados com IA...")
-    aiResult = await extractFromCotacoesWithAI({ instituicao, rubrica, cotacoes: parsed })
-    usedAI = true
-    console.log("[v0] IA extraiu:", aiResult.propostas.length, "propostas")
-  } catch (err) {
-    console.log("[v0] IA falhou:", err.message)
-    console.log("[v0] Usando fallback de extração de texto...")
-  }
-
-  if (!aiResult.propostas || aiResult.propostas.length === 0) {
-    console.log("[v0] Criando propostas usando extração de texto (fallback)")
-
-    const fallbackPropostas = parsed.map((cot, idx) => {
-      const extracted = guessFieldsFromText(cot.text || "")
-      console.log(`[v0] Cotação ${idx + 1} (${cot.name}):`, {
-        ofertante: extracted.ofertante || "NÃO ENCONTRADO",
-        cnpj: extracted.cnpj_ofertante || "NÃO ENCONTRADO",
-        valor: extracted.valor || "NÃO ENCONTRADO",
-      })
-
-      return {
-        selecao: `Cotação ${idx + 1}`,
-        ofertante: extracted.ofertante || `Fornecedor ${idx + 1}`,
-        cnpj_ofertante: extracted.cnpj_ofertante || "",
-        data_cotacao: extracted.data_cotacao || "",
-        valor: extracted.valor || "R$ 0,00",
-      }
-    })
-
-    aiResult.propostas = fallbackPropostas
-    console.log("[v0] Total de propostas criadas via fallback:", fallbackPropostas.length)
-  }
-
-  if (!aiResult.objeto && rubrica) {
-    aiResult.objeto = rubrica
-    console.log("[v0] Usando rubrica como objeto:", rubrica)
-  }
-
-  console.log("[v0] Resultado final da extração:", {
-    objeto: aiResult.objeto || "NÃO DEFINIDO",
-    propostas_count: aiResult.propostas.length,
-    usedAI,
-  })
-
-  return aiResult
-}
-
-function guessFieldsFromText(txt = "") {
-  const text = String(txt || "")
-  console.log("[v0] guessFieldsFromText - Texto recebido:", text.length, "caracteres")
-
-  if (!text || text.length < 10) {
-    console.log("[v0] Texto muito curto ou vazio, retornando campos vazios")
-    return {
-      ofertante: "",
-      cnpj_ofertante: "",
-      data_cotacao: "",
-      valor: "",
-    }
-  }
-
-  const rxCNPJ = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g
-  const rxCPF = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g
-
-  let cnpj = ""
-  let cpf = ""
-
-  const cnpjMatches = Array.from(text.matchAll(rxCNPJ))
-  if (cnpjMatches.length > 0) {
-    const raw = cnpjMatches[0][0].replace(/[^\d]/g, "")
-    cnpj = raw.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
-    console.log("[v0] CNPJ encontrado:", cnpj)
-  }
-
-  if (!cnpj) {
-    const cpfMatches = Array.from(text.matchAll(rxCPF))
-    if (cpfMatches.length > 0) {
-      const raw = cpfMatches[0][0].replace(/[^\d]/g, "")
-      cpf = raw.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
-      console.log("[v0] CPF encontrado:", cpf)
-    }
-  }
-
-  const docNum = cnpj || cpf || ""
-
-  const rxDate = /\b([0-3]?\d)[/\-.]([01]?\d)[/\-.](\d{2}|\d{4})\b/g
-  let dataCot = ""
-  const dateMatches = Array.from(text.matchAll(rxDate))
-
-  for (const m of dateMatches) {
-    const dd = +m[1],
-      mm = +m[2]
-    if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
-      let year = m[3]
-      if (year.length === 2) {
-        const y = +year
-        year = y >= 0 && y <= 50 ? "20" + year : "19" + year
-      }
-      dataCot = `${String(dd).padStart(2, "0")}/${String(mm).padStart(2, "0")}/${year}`
-      console.log("[v0] Data encontrada:", dataCot)
-      break
-    }
-  }
-
-  const rxBRL = /R?\$?\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2}\b/g
-  let valor = ""
-  let max = -1
-  const valorMatches = Array.from(text.matchAll(rxBRL))
-
-  console.log("[v0] Valores encontrados:", valorMatches.length)
-
-  for (const m of valorMatches) {
-    const raw = m[0].replace(/[^\d,]/g, "")
-    const normalized = raw.replace(/\./g, "").replace(",", ".")
-    const n = Number(normalized)
-
-    if (Number.isFinite(n) && n > max && n > 0.01) {
-      max = n
-      valor = `R$ ${n
-        .toFixed(2)
-        .replace(".", ",")
-        .replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`
-      console.log("[v0] Valor candidato:", valor, "(", n, ")")
-    }
-  }
-
-  if (valor) {
-    console.log("[v0] Valor final selecionado:", valor)
-  } else {
-    console.log("[v0] Nenhum valor encontrado")
-  }
-
-  let ofertante = ""
-  const lines = text
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-
-  const razaoSocialPatterns = [
-    /raz[aã]o\s+social\s*[:\-–]?\s*(.+)/i,
-    /empresa\s*[:\-–]?\s*(.+)/i,
-    /fornecedor\s*[:\-–]?\s*(.+)/i,
-    /nome\s+fantasia\s*[:\-–]?\s*(.+)/i,
-    /nome\s*[:\-–]?\s*(.+)/i,
-  ]
-
-  for (const pattern of razaoSocialPatterns) {
-    const m = text.match(pattern)
-    if (m && m[1]) {
-      ofertante = m[1].split(/\r?\n/)[0].trim()
-      ofertante = ofertante
-        .replace(/[^\w\s\-.,&]/g, "")
-        .slice(0, 100)
-        .trim()
-
-      if (ofertante.length > 3) {
-        console.log("[v0] Ofertante encontrado por pattern:", ofertante)
-        break
-      }
-    }
-  }
-
-  if (!ofertante) {
-    for (const line of lines.slice(0, 15)) {
-      if (line.length > 10 && line.length < 100) {
-        const digitCount = (line.match(/\d/g) || []).length
-        const upperCount = (line.match(/[A-Z]/g) || []).length
-
-        if (digitCount < line.length / 2 && upperCount > 2) {
-          ofertante = line
-            .replace(/[^\w\s\-.,&]/g, "")
-            .slice(0, 100)
-            .trim()
-          console.log("[v0] Ofertante encontrado por heurística:", ofertante)
-          break
-        }
-      }
-    }
-  }
-
-  const result = {
-    ofertante: ofertante || "",
-    cnpj_ofertante: docNum || "",
-    data_cotacao: dataCot || "",
-    valor: valor || "",
-  }
-
-  console.log("[v0] ========== RESULTADO EXTRAÇÃO ==========")
-  console.log("[v0] Ofertante:", result.ofertante || "NÃO ENCONTRADO")
-  console.log("[v0] CNPJ/CPF:", result.cnpj_ofertante || "NÃO ENCONTRADO")
-  console.log("[v0] Data:", result.data_cotacao || "NÃO ENCONTRADO")
-  console.log("[v0] Valor:", result.valor || "NÃO ENCONTRADO")
-  console.log("[v0] ==========================================")
-
-  return result
 }
 
 /* ---- Endpoints diretos (mantidos antes do generateDocsRouter) ---- */
@@ -1833,7 +1773,7 @@ if (useLegacyMapaRoute) {
         console.log("[v0] Tentando extrair dados de", cotacoesInput.length, "cotações...")
 
         try {
-          const { objeto: extractedObjeto, propostas: extractedPropostas } = await extractCotacoesFromFiles(
+          const { objeto: extractedObjeto, propostas: extractedPropostas } = await extractFromCotacoesWithAI(
             cotacoesInput,
             {
               instituicao: b.instituicao || "",
