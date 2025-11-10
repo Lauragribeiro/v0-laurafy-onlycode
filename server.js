@@ -1194,10 +1194,15 @@ async function pdfToTextFromBuffer(buf) {
 }
 
 async function parseCotacoes(cotacoes = []) {
+  console.log("[v0] ========================================")
+  console.log("[v0] ========== PARSE COTAÇÕES ==========")
   console.log("[v0] parseCotacoes: Processando", cotacoes?.length || 0, "cotações")
 
   const out = []
-  for (const c of cotacoes || []) {
+  for (let i = 0; i < (cotacoes || []).length; i++) {
+    const c = cotacoes[i]
+    console.log(`[v0] -------- Cotação ${i + 1} --------`)
+
     let name = "cotacao.pdf"
     let text = ""
     let buffer = null
@@ -1210,62 +1215,111 @@ async function parseCotacoes(cotacoes = []) {
         .replace(/^\/+/, "")
         .split(/[\\/]/)
         .pop()
+
       if (clean) {
-        const p = join(process.cwd(), "data", "uploads", clean)
-        console.log("[v0] Tentando ler arquivo:", p)
-        if (fs.existsSync(p)) {
-          try {
-            buffer = fs.readFileSync(p)
-            console.log("[v0] ✓ Arquivo lido com sucesso:", clean, "(", buffer.length, "bytes )")
-          } catch (err) {
-            console.log("[v0] ✗ Erro ao ler arquivo:", err.message)
+        const possiblePaths = [
+          join(process.cwd(), "data", "uploads", clean),
+          join(__dirname, "data", "uploads", clean),
+          join(UPLOADS_DIR, clean),
+        ]
+
+        console.log("[v0] Procurando arquivo:", clean)
+        for (const p of possiblePaths) {
+          if (fs.existsSync(p)) {
+            try {
+              buffer = fs.readFileSync(p)
+              console.log("[v0] ✓ Arquivo encontrado:", p, "(", buffer.length, "bytes )")
+              break
+            } catch (err) {
+              console.log("[v0] ✗ Erro ao ler:", err.message)
+            }
           }
-        } else {
-          console.log("[v0] ✗ Arquivo não encontrado:", p)
+        }
+
+        if (!buffer) {
+          console.log("[v0] ✗ Arquivo não encontrado em nenhum path testado")
         }
       }
     } else if (c && typeof c === "object") {
       name = String(c?.name || c?.filename || c?.fileName || name)
       text = String(c?.text || "")
 
-      console.log("[v0] Processando objeto cotação:", {
+      console.log("[v0] Tipo de objeto cotação:", {
         name,
         hasText: !!text,
         hasBase64: !!c?.base64,
+        hasData: !!c?.data,
         hasPath: !!c?.path,
         hasUrl: !!c?.url,
+        keys: Object.keys(c),
       })
 
       if (!text) {
+        // Tentar base64
         if (c?.base64) {
           try {
-            const b64 = c.base64.replace(/^data:.*;base64,/, "")
+            const b64 = String(c.base64).replace(/^data:.*;base64,/, "")
             buffer = Buffer.from(b64, "base64")
             console.log("[v0] ✓ Buffer criado de base64 (", buffer.length, "bytes )")
           } catch (err) {
             console.log("[v0] ✗ Erro ao decodificar base64:", err.message)
           }
-        } else if (c?.path && fs.existsSync(c.path)) {
+        }
+
+        // Tentar data (pode ser base64 também)
+        if (!buffer && c?.data) {
           try {
-            buffer = fs.readFileSync(c.path)
-            console.log("[v0] ✓ Arquivo lido do path:", c.path, "(", buffer.length, "bytes )")
+            const dataStr = String(c.data).replace(/^data:.*;base64,/, "")
+            buffer = Buffer.from(dataStr, "base64")
+            console.log("[v0] ✓ Buffer criado de c.data (", buffer.length, "bytes )")
           } catch (err) {
-            console.log("[v0] ✗ Erro ao ler do path:", err.message)
+            console.log("[v0] ✗ Erro ao decodificar c.data:", err.message)
           }
-        } else if (c?.url) {
+        }
+
+        // Tentar path
+        if (!buffer && c?.path) {
+          const possiblePaths = [
+            c.path,
+            join(process.cwd(), c.path),
+            join(__dirname, c.path),
+            join(UPLOADS_DIR, path.basename(c.path)),
+          ]
+
+          for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+              try {
+                buffer = fs.readFileSync(p)
+                console.log("[v0] ✓ Arquivo lido do path:", p, "(", buffer.length, "bytes )")
+                break
+              } catch (err) {
+                console.log("[v0] ✗ Erro ao ler do path:", err.message)
+              }
+            }
+          }
+        }
+
+        // Tentar URL
+        if (!buffer && c?.url) {
           try {
             const base = `http://localhost:${process.env.PORT || 3000}`
             const u = new URL(c.url, base)
-            console.log("[v0] Tentando ler de URL:", u.pathname)
+            console.log("[v0] Processando URL:", u.href)
+
             if (u.pathname.startsWith("/uploads/")) {
               const file = decodeURIComponent(u.pathname.split("/").pop())
-              const p = join(process.cwd(), "data", "uploads", file)
-              console.log("[v0] Path extraído da URL:", p)
-              if (fs.existsSync(p)) {
-                buffer = fs.readFileSync(p)
-                console.log("[v0] ✓ Arquivo lido da URL (", buffer.length, "bytes )")
-              } else {
-                console.log("[v0] ✗ Arquivo não encontrado na URL:", p)
+              const possiblePaths = [
+                join(process.cwd(), "data", "uploads", file),
+                join(__dirname, "data", "uploads", file),
+                join(UPLOADS_DIR, file),
+              ]
+
+              for (const p of possiblePaths) {
+                if (fs.existsSync(p)) {
+                  buffer = fs.readFileSync(p)
+                  console.log("[v0] ✓ Arquivo lido da URL (", buffer.length, "bytes )")
+                  break
+                }
               }
             }
           } catch (err) {
@@ -1275,88 +1329,35 @@ async function parseCotacoes(cotacoes = []) {
       }
     }
 
+    // Extrair texto do PDF se temos buffer
     if (buffer && buffer.length > 0) {
-      console.log("[v0] Extraindo texto do PDF...")
+      console.log("[v0] Extraindo texto do PDF (buffer de", buffer.length, "bytes)...")
       text = await pdfToTextFromBuffer(buffer)
-      console.log("[v0] ✓ Texto extraído:", text?.length || 0, "caracteres")
+      if (text) {
+        console.log("[v0] ✓ Texto extraído:", text.length, "caracteres")
+        console.log("[v0] Primeiros 200 caracteres:", text.substring(0, 200))
+      } else {
+        console.log("[v0] ✗ Nenhum texto extraído do PDF")
+      }
     }
 
-    if (text && text.length > 0) {
+    if (text && text.length > 10) {
       out.push({ name, text })
-      console.log("[v0] ✓ Cotação adicionada:", name)
+      console.log("[v0] ✓ Cotação adicionada com sucesso:", name, "(", text.length, "caracteres )")
     } else {
-      console.log("[v0] ⚠ Cotação sem texto:", name)
-      if (c && typeof c === "object" && (c.name || c.filename)) {
-        out.push({ name: c.name || c.filename, text: "" })
-      }
+      console.log("[v0] ⚠ Cotação SEM TEXTO válido:", name)
+      // Adicionar mesmo sem texto para manter o índice correto
+      out.push({ name, text: "" })
     }
   }
 
-  console.log("[v0] parseCotacoes: Total de cotações processadas:", out.length)
+  console.log("[v0] ========================================")
+  console.log("[v0] RESULTADO FINAL: Total de cotações processadas:", out.length)
+  console.log("[v0] Cotações COM texto:", out.filter((c) => c.text && c.text.length > 10).length)
+  console.log("[v0] Cotações SEM texto:", out.filter((c) => !c.text || c.text.length <= 10).length)
+  console.log("[v0] ========================================")
+
   return out
-}
-
-async function extractCotacoesFromFiles(cotacoes = [], { instituicao = "", rubrica = "" } = {}) {
-  console.log("[v0] extractCotacoesFromFiles - Iniciando extração de cotações")
-  console.log("[v0] Número de cotações recebidas:", cotacoes?.length || 0)
-
-  const parsed = await parseCotacoes(cotacoes)
-  console.log("[v0] Cotações parseadas:", parsed.length)
-
-  if (!parsed.length) {
-    console.log("[v0] Nenhuma cotação foi parseada com sucesso")
-    return { objeto: "", propostas: [] }
-  }
-
-  let aiResult = { objeto: "", propostas: [] }
-  let usedAI = false
-
-  try {
-    console.log("[v0] Tentando extrair dados com IA...")
-    aiResult = await extractFromCotacoesWithAI({ instituicao, rubrica, cotacoes: parsed })
-    usedAI = true
-    console.log("[v0] IA extraiu:", aiResult.propostas.length, "propostas")
-  } catch (err) {
-    console.log("[v0] IA falhou:", err.message)
-    console.log("[v0] Usando fallback de extração de texto...")
-  }
-
-  if (!aiResult.propostas || aiResult.propostas.length === 0) {
-    console.log("[v0] Criando propostas usando extração de texto (fallback)")
-
-    const fallbackPropostas = parsed.map((cot, idx) => {
-      const extracted = guessFieldsFromText(cot.text || "")
-      console.log(`[v0] Cotação ${idx + 1} (${cot.name}):`, {
-        ofertante: extracted.ofertante || "NÃO ENCONTRADO",
-        cnpj: extracted.cnpj_ofertante || "NÃO ENCONTRADO",
-        valor: extracted.valor || "NÃO ENCONTRADO",
-      })
-
-      return {
-        selecao: `Cotação ${idx + 1}`,
-        ofertante: extracted.ofertante || `Fornecedor ${idx + 1}`,
-        cnpj_ofertante: extracted.cnpj_ofertante || "",
-        data_cotacao: extracted.data_cotacao || "",
-        valor: extracted.valor || "R$ 0,00",
-      }
-    })
-
-    aiResult.propostas = fallbackPropostas
-    console.log("[v0] Total de propostas criadas via fallback:", fallbackPropostas.length)
-  }
-
-  if (!aiResult.objeto && rubrica) {
-    aiResult.objeto = rubrica
-    console.log("[v0] Usando rubrica como objeto:", rubrica)
-  }
-
-  console.log("[v0] Resultado final da extração:", {
-    objeto: aiResult.objeto || "NÃO DEFINIDO",
-    propostas_count: aiResult.propostas.length,
-    usedAI,
-  })
-
-  return aiResult
 }
 
 async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotacoes = [] } = {}) {
@@ -1513,8 +1514,82 @@ async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotac
   return { objeto: "", propostas: [] }
 }
 
+async function extractCotacoesFromFiles(cotacoes = [], { instituicao = "", rubrica = "" } = {}) {
+  console.log("[v0] extractCotacoesFromFiles - Iniciando extração de cotações")
+  console.log("[v0] Número de cotações recebidas:", cotacoes?.length || 0)
+
+  const parsed = await parseCotacoes(cotacoes)
+  console.log("[v0] Cotações parseadas:", parsed.length)
+
+  if (!parsed.length) {
+    console.log("[v0] Nenhuma cotação foi parseada com sucesso")
+    return { objeto: "", propostas: [] }
+  }
+
+  let aiResult = { objeto: "", propostas: [] }
+  let usedAI = false
+
+  try {
+    console.log("[v0] Tentando extrair dados com IA...")
+    aiResult = await extractFromCotacoesWithAI({ instituicao, rubrica, cotacoes: parsed })
+    usedAI = true
+    console.log("[v0] IA extraiu:", aiResult.propostas.length, "propostas")
+  } catch (err) {
+    console.log("[v0] IA falhou:", err.message)
+    console.log("[v0] Usando fallback de extração de texto...")
+  }
+
+  if (!aiResult.propostas || aiResult.propostas.length === 0) {
+    console.log("[v0] Criando propostas usando extração de texto (fallback)")
+
+    const fallbackPropostas = parsed.map((cot, idx) => {
+      const extracted = guessFieldsFromText(cot.text || "")
+      console.log(`[v0] Cotação ${idx + 1} (${cot.name}):`, {
+        ofertante: extracted.ofertante || "NÃO ENCONTRADO",
+        cnpj: extracted.cnpj_ofertante || "NÃO ENCONTRADO",
+        valor: extracted.valor || "NÃO ENCONTRADO",
+      })
+
+      return {
+        selecao: `Cotação ${idx + 1}`,
+        ofertante: extracted.ofertante || `Fornecedor ${idx + 1}`,
+        cnpj_ofertante: extracted.cnpj_ofertante || "",
+        data_cotacao: extracted.data_cotacao || "",
+        valor: extracted.valor || "R$ 0,00",
+      }
+    })
+
+    aiResult.propostas = fallbackPropostas
+    console.log("[v0] Total de propostas criadas via fallback:", fallbackPropostas.length)
+  }
+
+  if (!aiResult.objeto && rubrica) {
+    aiResult.objeto = rubrica
+    console.log("[v0] Usando rubrica como objeto:", rubrica)
+  }
+
+  console.log("[v0] Resultado final da extração:", {
+    objeto: aiResult.objeto || "NÃO DEFINIDO",
+    propostas_count: aiResult.propostas.length,
+    usedAI,
+  })
+
+  return aiResult
+}
+
 function guessFieldsFromText(txt = "") {
   const text = String(txt || "")
+  console.log("[v0] guessFieldsFromText - Texto recebido:", text.length, "caracteres")
+
+  if (!text || text.length < 10) {
+    console.log("[v0] Texto muito curto ou vazio, retornando campos vazios")
+    return {
+      ofertante: "",
+      cnpj_ofertante: "",
+      data_cotacao: "",
+      valor: "",
+    }
+  }
 
   const rxCNPJ = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g
   const rxCPF = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g
@@ -1522,17 +1597,19 @@ function guessFieldsFromText(txt = "") {
   let cnpj = ""
   let cpf = ""
 
-  // Procurar CNPJ primeiro
   const cnpjMatches = Array.from(text.matchAll(rxCNPJ))
   if (cnpjMatches.length > 0) {
-    cnpj = cnpjMatches[0][0].replace(/[^\d]/g, "").replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
+    const raw = cnpjMatches[0][0].replace(/[^\d]/g, "")
+    cnpj = raw.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
+    console.log("[v0] CNPJ encontrado:", cnpj)
   }
 
-  // Se não encontrou CNPJ, procurar CPF
   if (!cnpj) {
     const cpfMatches = Array.from(text.matchAll(rxCPF))
     if (cpfMatches.length > 0) {
-      cpf = cpfMatches[0][0].replace(/[^\d]/g, "").replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+      const raw = cpfMatches[0][0].replace(/[^\d]/g, "")
+      cpf = raw.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+      console.log("[v0] CPF encontrado:", cpf)
     }
   }
 
@@ -1540,13 +1617,19 @@ function guessFieldsFromText(txt = "") {
 
   const rxDate = /\b([0-3]?\d)[/\-.]([01]?\d)[/\-.](\d{2}|\d{4})\b/g
   let dataCot = ""
-  for (const m of text.matchAll(rxDate)) {
+  const dateMatches = Array.from(text.matchAll(rxDate))
+
+  for (const m of dateMatches) {
     const dd = +m[1],
       mm = +m[2]
     if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
       let year = m[3]
-      if (year.length === 2) year = "20" + year
+      if (year.length === 2) {
+        const y = +year
+        year = y >= 0 && y <= 50 ? "20" + year : "19" + year
+      }
       dataCot = `${String(dd).padStart(2, "0")}/${String(mm).padStart(2, "0")}/${year}`
+      console.log("[v0] Data encontrada:", dataCot)
       break
     }
   }
@@ -1554,18 +1637,29 @@ function guessFieldsFromText(txt = "") {
   const rxBRL = /R?\$?\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2}\b/g
   let valor = ""
   let max = -1
-  for (const m of text.matchAll(rxBRL)) {
+  const valorMatches = Array.from(text.matchAll(rxBRL))
+
+  console.log("[v0] Valores encontrados:", valorMatches.length)
+
+  for (const m of valorMatches) {
     const raw = m[0].replace(/[^\d,]/g, "")
     const normalized = raw.replace(/\./g, "").replace(",", ".")
     const n = Number(normalized)
-    if (Number.isFinite(n) && n > max) {
+
+    if (Number.isFinite(n) && n > max && n > 0.01) {
       max = n
-      // Formatar como BRL
       valor = `R$ ${n
         .toFixed(2)
         .replace(".", ",")
         .replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`
+      console.log("[v0] Valor candidato:", valor, "(", n, ")")
     }
+  }
+
+  if (valor) {
+    console.log("[v0] Valor final selecionado:", valor)
+  } else {
+    console.log("[v0] Nenhum valor encontrado")
   }
 
   let ofertante = ""
@@ -1574,51 +1668,63 @@ function guessFieldsFromText(txt = "") {
     .map((s) => s.trim())
     .filter(Boolean)
 
-  // Procurar por "Razão Social" ou variações
   const razaoSocialPatterns = [
     /raz[aã]o\s+social\s*[:\-–]?\s*(.+)/i,
     /empresa\s*[:\-–]?\s*(.+)/i,
     /fornecedor\s*[:\-–]?\s*(.+)/i,
     /nome\s+fantasia\s*[:\-–]?\s*(.+)/i,
+    /nome\s*[:\-–]?\s*(.+)/i,
   ]
 
   for (const pattern of razaoSocialPatterns) {
     const m = text.match(pattern)
     if (m && m[1]) {
       ofertante = m[1].split(/\r?\n/)[0].trim()
-      // Limpar caracteres especiais e limitar tamanho
-      ofertante = ofertante.replace(/[^\w\s\-.]/g, "").slice(0, 100)
-      if (ofertante.length > 5) break
+      ofertante = ofertante
+        .replace(/[^\w\s\-.,&]/g, "")
+        .slice(0, 100)
+        .trim()
+
+      if (ofertante.length > 3) {
+        console.log("[v0] Ofertante encontrado por pattern:", ofertante)
+        break
+      }
     }
   }
 
-  // Se não encontrou, tentar pegar a primeira linha que parece um nome de empresa
   if (!ofertante) {
-    for (const line of lines.slice(0, 10)) {
-      // Linha com mais de 10 caracteres e sem números demais
+    for (const line of lines.slice(0, 15)) {
       if (line.length > 10 && line.length < 100) {
         const digitCount = (line.match(/\d/g) || []).length
-        if (digitCount < line.length / 3) {
+        const upperCount = (line.match(/[A-Z]/g) || []).length
+
+        if (digitCount < line.length / 2 && upperCount > 2) {
           ofertante = line
+            .replace(/[^\w\s\-.,&]/g, "")
+            .slice(0, 100)
+            .trim()
+          console.log("[v0] Ofertante encontrado por heurística:", ofertante)
           break
         }
       }
     }
   }
 
-  console.log("[v0] guessFieldsFromText extraiu:", {
-    ofertante: ofertante || "NÃO ENCONTRADO",
-    cnpj_ofertante: docNum || "NÃO ENCONTRADO",
-    data_cotacao: dataCot || "NÃO ENCONTRADO",
-    valor: valor || "NÃO ENCONTRADO",
-  })
-
-  return {
-    ofertante,
-    cnpj_ofertante: docNum,
-    data_cotacao: dataCot,
+  const result = {
+    ofertante: ofertante || "",
+    cnpj_ofertante: docNum || "",
+    data_cotacao: dataCot || "",
     valor: valor || "",
   }
+
+  console.log("[v0] ========== RESULTADO EXTRAÇÃO ==========")
+  console.log("[v0] Ofertante:", result.ofertante || "NÃO ENCONTRADO")
+  console.log("[v0] CNPJ/CPF:", result.cnpj_ofertante || "NÃO ENCONTRADO")
+  console.log("[v0] Data:", result.data_cotacao || "NÃO ENCONTRADO")
+  console.log("[v0] Valor:", result.valor || "NÃO ENCONTRADO")
+  console.log("[v0] ==========================================")
+
+  return result
 }
 
 /* ---- Endpoints diretos (mantidos antes do generateDocsRouter) ---- */
