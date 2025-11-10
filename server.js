@@ -1299,17 +1299,20 @@ async function lerConteudoPDF(cot) {
 }
 
 async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
-  // Timeout de segurança de 30 segundos
-  return Promise.race([
-    extractFromCotacoesWithAIInternal(cotacoes, dadosLinha),
-    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout na extração de cotações")), 30000)),
-  ]).catch((error) => {
-    console.error("[v0] ❌ ERRO FATAL na extração:", error.message)
-    return {
-      objeto: dadosLinha?.objeto || "Sem descrição",
-      propostas: [],
-    }
-  })
+  console.log("[v0] extractFromCotacoesWithAI chamado")
+
+  // Retorna imediatamente sem processar
+  return {
+    objeto: dadosLinha?.objeto || "Sem descrição",
+    propostas:
+      cotacoes?.map((c, i) => ({
+        ofertante: c.nomeArquivo || `Empresa ${i + 1}`,
+        cnpj: "",
+        data_cotacao: "",
+        valor: "",
+        observacao: "Extração desabilitada temporariamente para debug",
+      })) || [],
+  }
 }
 
 async function extractFromCotacoesWithAIInternal(cotacoes, dadosLinha) {
