@@ -1785,6 +1785,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
   ;(async () => {
+    const auth = (() => {
+      try {
+        return JSON.parse(localStorage.getItem("edge.auth") || "null")
+      } catch {
+        return null
+      }
+    })()
+    const tipoAcesso = auth?.tipoAcesso || "ADMIN"
+
     try {
       const url = new URL(location.href)
       projectId = url.searchParams.get("id") || ""
@@ -1811,6 +1820,17 @@ document.addEventListener("DOMContentLoaded", () => {
       $("#tab-evidencias")?.setAttribute("href", `/prestacao.html?id=${encodeURIComponent(projectId)}`)
       $("#tab-docfin")?.setAttribute("href", `/docfin.html?id=${encodeURIComponent(projectId)}`)
       $("#tab-bolsas")?.setAttribute("href", `/bolsas.html?id=${encodeURIComponent(projectId)}`)
+
+      if (tipoAcesso === "GERENTE") {
+        const tabDoc = $("#tab-docfin")
+        const tabBolsas = $("#tab-bolsas")
+        if (tabDoc) {
+          tabDoc.style.display = "none"
+        }
+        if (tabBolsas) {
+          tabBolsas.style.display = "none"
+        }
+      }
 
       try {
         const rr = await fetch(`/api/purchases?projectId=${encodeURIComponent(projectId)}`)

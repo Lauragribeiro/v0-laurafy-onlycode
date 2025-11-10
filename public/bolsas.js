@@ -1309,12 +1309,30 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       })
     }
 
+    const auth = (() => {
+      try {
+        return JSON.parse(localStorage.getItem("edge.auth") || "null")
+      } catch {
+        return null
+      }
+    })()
+    const tipoAcesso = auth?.tipoAcesso || "ADMIN"
+
     const initTabs = () => {
       const qs = projectId ? `?id=${encodeURIComponent(projectId)}` : ""
       if (tabEvid) tabEvid.href = `/prestacao.html${qs}`
       if (tabDoc) tabDoc.href = `/docfin.html${qs}`
       if (tabBolsas) tabBolsas.href = `/bolsas.html${qs}`
       tabBolsas?.classList.add("active")
+
+      if (tipoAcesso === "GERENTE") {
+        if (tabDoc) {
+          tabDoc.style.display = "none"
+        }
+        if (tabBolsas) {
+          tabBolsas.style.display = "none"
+        }
+      }
     }
 
     const loadProject = async () => {

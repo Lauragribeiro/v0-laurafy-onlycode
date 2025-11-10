@@ -191,13 +191,15 @@ document.addEventListener("DOMContentLoaded", () => {
       all = j?.data || []
 
       if (tipoAcesso === "GERENTE") {
+        console.log("[v0] Filtrando projetos para gerente:", emailUsuario)
         all = all.filter((p) => {
           const emailGerente = (p.emailGerente || "").trim().toLowerCase()
           const email = emailUsuario.toLowerCase()
-
+          console.log("[v0] Projeto:", p.titulo, "Email gerente:", emailGerente, "Email usuario:", email)
           // Mostrar apenas projetos onde o email do gerente corresponde ao usuário logado
           return emailGerente === email
         })
+        console.log("[v0] Projetos filtrados:", all.length)
       }
 
       render()
