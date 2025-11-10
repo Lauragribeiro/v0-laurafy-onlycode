@@ -1583,7 +1583,7 @@ if (useLegacyMapaRoute) {
             console.log("[v0] Nenhuma proposta extraída, criando propostas vazias para cada cotação.")
             propostas = cotacoesInput.map((cot, idx) => ({
               selecao: `Cotação ${idx + 1}`,
-              ofertante: cot?.name || cot?.filename || `Fornecedor ${idx + 1}`,
+              ofertante: cot.name || cot.filename || `Fornecedor ${idx + 1}`,
               cnpj_ofertante: "",
               data_cotacao: "",
               valor: "",
@@ -1601,7 +1601,7 @@ if (useLegacyMapaRoute) {
             console.log("[v0] Criando propostas vazias após erro de extração")
             propostas = cotacoesInput.map((cot, idx) => ({
               selecao: `Cotação ${idx + 1}`,
-              ofertante: cot?.name || cot?.filename || `Fornecedor ${idx + 1}`,
+              ofertante: cot.name || cot.filename || `Fornecedor ${idx + 1}`,
               cnpj_ofertante: "",
               data_cotacao: "",
               valor: "",
@@ -1669,7 +1669,7 @@ if (useLegacyMapaRoute) {
         projeto_nome: b.projeto || b.proj?.projetoNome || "", // Alias
         rubrica,
         natureza_disp: rubrica, // Alias
-        objeto: objeto || rubrica, // Usa rubrica se objeto estiver vazio
+        objeto: objeto || rubrica, // Usa rubrica como objeto se objeto estiver vazio
         propostas: propsForTemplate,
         data_aquisicao: fmtBRDate(dtPg), // Formata a data de pagamento
         justificativa: b.justificativa || b.processo?.justificativa || "",
@@ -1826,20 +1826,4 @@ console.log("[server] ========================================")
 console.log("[server] ========================================")
 console.log("[server] 🚀 Iniciando servidor...")
 console.log("[server] ========================================")
-startServer()
-
-startServer()
-
-startServer()
-
-startServer()
-
-startServer()
-
-startServer()
-
-startServer()
-
-startServer()()
-
 startServer()
