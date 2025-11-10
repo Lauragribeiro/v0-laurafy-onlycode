@@ -1563,7 +1563,7 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
       // 6. Objeto (apenas na primeira cotação)
       if (i === 0 && !objetoGlobal) {
         const objetoPatterns = [
-          /(?:Objeto|Descri[çc][ãa]o)[:\s]*([^\n\r]{10,200})/i,
+          /(?:Objeto|Descrição|Descricao)[:\s]*([^\n\r]{10,200})/i,
           /(?:Item|Produto)[:\s]*([^\n\r]{10,200})/i,
         ]
 
