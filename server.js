@@ -1494,12 +1494,14 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
 
       // 4. Valor
       let valor = ""
-      const valorRegex = /R\$\s*([\d.,]+)/g
+      const valorMatches = texto.match(/R\$\s*([\d.,]+)/g) || []
       let maiorValor = 0
-      let match
 
-      while ((match = valorRegex.exec(texto)) !== null) {
-        const numStr = match[1].replace(/\./g, "").replace(",", ".")
+      for (const valorMatch of valorMatches) {
+        const numStr = valorMatch
+          .replace(/R\$\s*/, "")
+          .replace(/\./g, "")
+          .replace(",", ".")
         const num = Number.parseFloat(numStr)
         if (!isNaN(num) && num > maiorValor) {
           maiorValor = num
@@ -1921,6 +1923,10 @@ console.log("[server] ========================================")
 console.log("[server] ========================================")
 console.log("[server] 🚀 Iniciando servidor...")
 console.log("[server] ========================================")
+startServer()
+
+startServer()
+
 startServer()
 
 startServer()
