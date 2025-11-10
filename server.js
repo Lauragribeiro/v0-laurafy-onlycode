@@ -1603,8 +1603,8 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
   }
 
   console.log(`\n[v0] ========== EXTRAÇÃO FINALIZADA ==========`)
-  console.log(`[v0] Total de propostas extraídas: ${propostas.length};`)
-  console.log(`[v0] Objeto global: ${objetoGlobal || "(não encontrado)"};`)
+  console.log(`[v0] Total de propostas extraídas: ${propostas.length}`)
+  console.log(`[v0] Objeto global: ${objetoGlobal || "(não encontrado)"}`)
   console.log(`[v0] Propostas: `, JSON.stringify(propostas, null, 2))
 
   return {
