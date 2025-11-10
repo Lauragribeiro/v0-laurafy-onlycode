@@ -1299,23 +1299,6 @@ async function lerConteudoPDF(cot) {
 }
 
 async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
-  console.log("[v0] extractFromCotacoesWithAI chamado")
-
-  // Retorna imediatamente sem processar
-  return {
-    objeto: dadosLinha?.objeto || "Sem descrição",
-    propostas:
-      cotacoes?.map((c, i) => ({
-        ofertante: c.nomeArquivo || `Empresa ${i + 1}`,
-        cnpj: "",
-        data_cotacao: "",
-        valor: "",
-        observacao: "Extração desabilitada temporariamente para debug",
-      })) || [],
-  }
-}
-
-async function extractFromCotacoesWithAIInternal(cotacoes, dadosLinha) {
   console.log("[v0] ========== INICIANDO EXTRAÇÃO DE COTAÇÕES ==========")
   console.log("[v0] Total de cotações recebidas:", cotacoes?.length || 0)
 
@@ -1341,29 +1324,31 @@ async function extractFromCotacoesWithAIInternal(cotacoes, dadosLinha) {
         console.log(`[v0] ✓ Usando texto pré-extraído (${textoExtraido.length} chars)`)
       }
       // Estratégia 2: Tentar ler do filesystem
-      else if (cotacao.nomeArquivo) {
+      else if (cotacao.nomeArquivo || cotacao.name || cotacao.filename) {
+        const nomeArquivo = cotacao.nomeArquivo || cotacao.name || cotacao.filename
         const caminhosPossiveis = [
-          path.join(UPLOADS_DIR, cotacao.nomeArquivo),
-          path.join(__dirname, "data", "uploads", cotacao.nomeArquivo),
-          path.join(__dirname, "uploads", cotacao.nomeArquivo),
+          path.join(UPLOADS_DIR, nomeArquivo),
+          path.join(__dirname, "data", "uploads", nomeArquivo),
+          path.join(__dirname, "uploads", nomeArquivo),
         ]
 
         for (const caminho of caminhosPossiveis) {
           try {
             if (fs.existsSync(caminho)) {
               const buffer = await fsp.readFile(caminho)
+              console.log(`[v0] ✓ Arquivo encontrado: ${caminho} (${buffer.length} bytes)`)
 
-              // Detecta se é PDF
+              // Detecta se é PDF pelos magic bytes
               const isPdf = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
 
               if (isPdf) {
                 const pdfParse = (await import("pdf-parse")).default
                 const pdfData = await pdfParse(buffer)
                 textoExtraido = pdfData.text
-                console.log(`[v0] ✓ PDF lido com sucesso: ${caminho} (${textoExtraido.length} chars)`)
+                console.log(`[v0] ✓ PDF parseado com sucesso (${textoExtraido.length} chars)`)
               } else {
                 textoExtraido = buffer.toString("utf-8")
-                console.log(`[v0] ✓ Arquivo texto lido: ${caminho} (${textoExtraido.length} chars)`)
+                console.log(`[v0] ✓ Arquivo texto lido (${textoExtraido.length} chars)`)
               }
               break
             }
@@ -1376,7 +1361,7 @@ async function extractFromCotacoesWithAIInternal(cotacoes, dadosLinha) {
       if (!textoExtraido || textoExtraido.length < 10) {
         console.log(`[v0] ⚠️ Texto insuficiente para cotação ${i + 1}`)
         propostas.push({
-          ofertante: cotacao.nomeArquivo || `Empresa ${i + 1}`,
+          ofertante: cotacao.nomeArquivo || cotacao.name || `Empresa ${i + 1}`,
           cnpj: "",
           data_cotacao: "",
           valor: "",
@@ -1385,9 +1370,8 @@ async function extractFromCotacoesWithAIInternal(cotacoes, dadosLinha) {
         continue
       }
 
-      console.log(`[v0] Texto extraído (primeiros 200 chars): ${textoExtraido.substring(0, 200)}...`)
+      console.log(`[v0] Primeiros 300 chars do texto: ${textoExtraido.substring(0, 300)}...`)
 
-      // Extração simples com regex
       const proposta = {
         ofertante: "",
         cnpj: "",
@@ -1396,70 +1380,120 @@ async function extractFromCotacoesWithAIInternal(cotacoes, dadosLinha) {
         observacao: "",
       }
 
-      // CNPJ
+      // Extrai CNPJ (formato brasileiro)
       const cnpjMatch = textoExtraido.match(/(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/)
       if (cnpjMatch) {
-        proposta.cnpj = cnpjMatch[1]
-          .replace(/[^\d]/g, "")
-          .replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
+        const digits = cnpjMatch[1].replace(/\D/g, "")
+        proposta.cnpj = digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
         console.log(`[v0] ✓ CNPJ encontrado: ${proposta.cnpj}`)
       }
 
-      // Nome da empresa (pega do nome do arquivo ou busca no texto)
-      if (cotacao.nomeArquivo) {
-        proposta.ofertante = cotacao.nomeArquivo.replace(/\.(pdf|txt|docx)$/i, "")
+      // Nome da empresa (usa nome do arquivo ou busca padrões comuns)
+      if (cotacao.nomeArquivo || cotacao.name) {
+        proposta.ofertante = (cotacao.nomeArquivo || cotacao.name).replace(/\.(pdf|txt|docx)$/i, "")
       } else {
-        const empresaMatch = textoExtraido.match(/(BIDMAX|Sistema Informática|[A-Z][a-z]+ [A-Z][a-z]+)/)
-        proposta.ofertante = empresaMatch ? empresaMatch[1] : `Empresa ${i + 1}`
+        // Busca padrões de nomes de empresas no texto
+        const empresaMatch = textoExtraido.match(
+          /(BIDMAX[^,\n]*|Sistema Informática[^,\n]*|[A-Z][A-Z\s]+(?:LTDA|S\.A\.|ME|EPP))/,
+        )
+        proposta.ofertante = empresaMatch ? empresaMatch[1].trim() : `Empresa ${i + 1}`
       }
       console.log(`[v0] ✓ Ofertante: ${proposta.ofertante}`)
 
-      // Data
-      const dataMatch = textoExtraido.match(/(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/)
-      if (dataMatch) {
-        proposta.data_cotacao = `${dataMatch[1].padStart(2, "0")}/${dataMatch[2].padStart(2, "0")}/${dataMatch[3]}`
-        console.log(`[v0] ✓ Data: ${proposta.data_cotacao}`)
+      // Data em múltiplos formatos
+      let dataEncontrada = false
+
+      // Formato DD/MM/YYYY ou DD-MM-YYYY
+      const dataMatch1 = textoExtraido.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/)
+      if (dataMatch1) {
+        proposta.data_cotacao = `${dataMatch1[1].padStart(2, "0")}/${dataMatch1[2].padStart(2, "0")}/${dataMatch1[3]}`
+        dataEncontrada = true
+        console.log(`[v0] ✓ Data encontrada (formato 1): ${proposta.data_cotacao}`)
       }
 
-      // Valor
-      const valorMatches = textoExtraido.match(/R\$\s*([\d.,]+)/g)
-      if (valorMatches && valorMatches.length > 0) {
-        const valores = valorMatches
-          .map((v) => {
-            const num = v.replace(/[^\d,]/g, "").replace(",", ".")
-            return Number.parseFloat(num)
-          })
-          .filter((n) => !isNaN(n))
-
-        if (valores.length > 0) {
-          const maiorValor = Math.max(...valores)
-          proposta.valor = `R$ ${maiorValor.toFixed(2).replace(".", ",")}`
-          console.log(`[v0] ✓ Valor: ${proposta.valor}`)
+      // Formato "5 de junho de 2025"
+      if (!dataEncontrada) {
+        const dataMatch2 = textoExtraido.match(
+          /(\d{1,2})\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i,
+        )
+        if (dataMatch2) {
+          const meses = {
+            janeiro: "01",
+            fevereiro: "02",
+            março: "03",
+            marco: "03",
+            abril: "04",
+            maio: "05",
+            junho: "06",
+            julho: "07",
+            agosto: "08",
+            setembro: "09",
+            outubro: "10",
+            novembro: "11",
+            dezembro: "12",
+          }
+          const mes = meses[dataMatch2[2].toLowerCase()]
+          if (mes) {
+            proposta.data_cotacao = `${dataMatch2[1].padStart(2, "0")}/${mes}/${dataMatch2[3]}`
+            dataEncontrada = true
+            console.log(`[v0] ✓ Data encontrada (formato 2): ${proposta.data_cotacao}`)
+          }
         }
       }
 
-      // Observação
+      // Valor monetário (procura por R$ ou "Total")
+      const valorMatches = textoExtraido.match(/(?:Total|Subtotal|Valor)[\s:]*R\$\s*([\d.,]+)|R\$\s*([\d.,]+)/gi)
+      if (valorMatches && valorMatches.length > 0) {
+        const valores = []
+        for (const match of valorMatches) {
+          const numMatch = match.match(/([\d.,]+)/)
+          if (numMatch) {
+            const numStr = numMatch[1].replace(/\./g, "").replace(",", ".")
+            const num = Number.parseFloat(numStr)
+            if (!isNaN(num) && num > 0) {
+              valores.push(num)
+            }
+          }
+        }
+
+        if (valores.length > 0) {
+          // Pega o maior valor (geralmente é o total)
+          const maiorValor = Math.max(...valores)
+          proposta.valor = `R$ ${maiorValor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          console.log(`[v0] ✓ Valor encontrado: ${proposta.valor} (de ${valores.length} valores encontrados)`)
+        }
+      }
+
+      // Observações (prazo, garantia, etc)
       const obs = []
-      if (textoExtraido.match(/prazo.*entrega/i)) {
-        const prazoMatch = textoExtraido.match(/prazo.*entrega[:\s]*([^\n.]+)/i)
-        if (prazoMatch) obs.push(`Prazo: ${prazoMatch[1].trim()}`)
+
+      const prazoMatch = textoExtraido.match(/prazo[^:]*:?\s*([^\n.]{5,100})/i)
+      if (prazoMatch) {
+        obs.push(`Prazo: ${prazoMatch[1].trim()}`)
       }
-      if (textoExtraido.match(/garantia/i)) {
-        const garantiaMatch = textoExtraido.match(/garantia[:\s]*([^\n.]+)/i)
-        if (garantiaMatch) obs.push(`Garantia: ${garantiaMatch[1].trim()}`)
+
+      const garantiaMatch = textoExtraido.match(/garantia[^:]*:?\s*([^\n.]{5,100})/i)
+      if (garantiaMatch) {
+        obs.push(`Garantia: ${garantiaMatch[1].trim()}`)
       }
-      proposta.observacao = obs.length > 0 ? obs.join(". ") : "Sem observações"
+
+      const pagamentoMatch = textoExtraido.match(/(?:forma de )?pagamento[^:]*:?\s*([^\n.]{5,100})/i)
+      if (pagamentoMatch) {
+        obs.push(`Pagamento: ${pagamentoMatch[1].trim()}`)
+      }
+
+      proposta.observacao = obs.length > 0 ? obs.join(". ") : "Conforme proposta anexa"
 
       propostas.push(proposta)
-      console.log(`[v0] ✓ Proposta ${i + 1} criada com sucesso`)
+      console.log(`[v0] ✓ Proposta ${i + 1} criada:`, JSON.stringify(proposta, null, 2))
     } catch (error) {
       console.error(`[v0] ✗ Erro ao processar cotação ${i + 1}:`, error.message)
       propostas.push({
-        ofertante: cotacao.nomeArquivo || `Empresa ${i + 1}`,
+        ofertante: cotacao.nomeArquivo || cotacao.name || `Empresa ${i + 1}`,
         cnpj: "",
         data_cotacao: "",
         valor: "",
-        observacao: `Erro ao processar: ${error.message}`,
+        observacao: `Erro: ${error.message}`,
       })
     }
   }
