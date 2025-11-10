@@ -360,3 +360,20 @@
   <!-- Scripts -->
   <script type="module" src="/scripts.js"></script>
   <script type="module" src="/docfin.js"></script>
+
+  <!-- Adicionando controle de acesso para gerentes de projeto -->
+  <script type="module">
+    import { getAuth } from "/scripts.js";
+    
+    const auth = getAuth();
+    const tipoAcesso = auth?.tipoAcesso || "ADMIN";
+    
+    console.log("[v0] Tipo de acesso em docfin:", tipoAcesso);
+    
+    if (tipoAcesso === "GERENTE") {
+      // Redirecionar para evidências se tentar acessar diretamente
+      window.location.href = "/prestacao.html" + window.location.search;
+    }
+  </script>
+</body>
+</html>

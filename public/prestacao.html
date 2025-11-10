@@ -107,6 +107,32 @@
   const me = getAuth();
   document.querySelector("#userName")?.textContent = me?.name || "";
   document.querySelector("#logoutBtn")?.addEventListener("click", logout);
+  
+  const tipoAcesso = me?.tipoAcesso || "ADMIN";
+  console.log("[v0] Tipo de acesso na prestação:", tipoAcesso);
+  
+  if (tipoAcesso === "GERENTE") {
+    // Ocultar abas
+    const tabDocfin = document.getElementById("tab-docfin");
+    const tabBolsas = document.getElementById("tab-bolsas");
+    
+    if (tabDocfin) {
+      tabDocfin.style.display = "none";
+      console.log("[v0] Aba Documentação Financeira ocultada");
+    }
+    
+    if (tabBolsas) {
+      tabBolsas.style.display = "none";
+      console.log("[v0] Aba Gerenciamento de Bolsas ocultada");
+    }
+    
+    // Alterar texto do cabeçalho da coluna de notificação
+    const thNotificar = document.getElementById("th-notificar");
+    if (thNotificar) {
+      thNotificar.textContent = "Notificar a Conformidade a entrega";
+      console.log("[v0] Texto da coluna de notificação alterado");
+    }
+  }
 </script>
 </body>
 </html>

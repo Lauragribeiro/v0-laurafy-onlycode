@@ -191,15 +191,26 @@ document.addEventListener("DOMContentLoaded", () => {
       all = j?.data || []
 
       if (tipoAcesso === "GERENTE") {
-        console.log("[v0] Filtrando projetos para gerente:", emailUsuario)
+        console.log("[v0] =================================")
+        console.log("[v0] FILTRO DE PROJETOS PARA GERENTE")
+        console.log("[v0] Email do usuário logado:", emailUsuario)
+        console.log("[v0] Total de projetos antes do filtro:", all.length)
+
         all = all.filter((p) => {
           const emailGerente = (p.emailGerente || "").trim().toLowerCase()
           const email = emailUsuario.toLowerCase()
-          console.log("[v0] Projeto:", p.titulo, "Email gerente:", emailGerente, "Email usuario:", email)
-          // Mostrar apenas projetos onde o email do gerente corresponde ao usuário logado
-          return emailGerente === email
+          const match = emailGerente === email
+
+          console.log("[v0] Projeto:", p.titulo)
+          console.log("[v0]   - Email no projeto:", emailGerente || "(não definido)")
+          console.log("[v0]   - Email do usuário:", email)
+          console.log("[v0]   - Match:", match ? "SIM" : "NÃO")
+
+          return match
         })
-        console.log("[v0] Projetos filtrados:", all.length)
+
+        console.log("[v0] Total de projetos após o filtro:", all.length)
+        console.log("[v0] =================================")
       }
 
       render()
