@@ -1456,24 +1456,26 @@ async function extractFromCotacoesWithAI(cotacoes, contexto = {}) {
           const data = await pdfParse(buffer)
           texto = data.text || ""
           console.log(`[v0] ✓ PDF parseado: ${texto.length} caracteres`)
+          console.log(`[v0] Primeiros 500 chars:\n${texto.substring(0, 500)}`)
         } catch (err) {
           console.log(`[v0] ✗ Erro ao parsear PDF:`, err.message)
         }
       } else {
         texto = buffer.toString("utf-8")
         console.log(`[v0] ✓ Texto extraído: ${texto.length} caracteres`)
+        console.log(`[v0] Primeiros 500 chars:\n${texto.substring(0, 500)}`)
       }
     }
 
-    if (!texto || texto.length < 50) {
+    if (!texto || texto.length < 20) {
       console.log(`[v0] ⚠️ Cotação ${i + 1}: texto insuficiente (${texto.length} caracteres)`)
       propostas.push({
         selecao: `Cotação ${i + 1}`,
         ofertante: cotacao.name || cotacao.filename || cotacao.key || `Fornecedor ${i + 1}`,
-        cnpj_ofertante: "",
-        data_cotacao: "",
-        valor: "",
-        observacao: "Texto da cotação não pôde ser extraído ou é insuficiente.",
+        cnpj_ofertante: "Não identificado",
+        data_cotacao: new Date().toLocaleDateString("pt-BR"),
+        valor: "A consultar",
+        observacao: "Erro: texto da cotação não pôde ser extraído do PDF.",
       })
       continue
     }
@@ -1486,29 +1488,49 @@ async function extractFromCotacoesWithAI(cotacoes, contexto = {}) {
       cnpj_ofertante: "",
       data_cotacao: "",
       valor: "",
-      observacao: "Conforme proposta anexa", // Padrão
+      observacao: "",
     }
 
-    // Extrair CNPJ (formato XX.XXX.XXX/XXXX-XX)
-    const cnpjMatch = texto.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/)
-    if (cnpjMatch) {
-      proposta.cnpj_ofertante = cnpjMatch[0]
-      console.log(`[v0] ✓ CNPJ encontrado: ${proposta.cnpj_ofertante}`)
+    const cnpjPatterns = [
+      /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g, // Formato completo: 00.000.000/0000-00
+      /CNPJ[:\s]*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/gi,
+      /CNPJ[:\s]*(\d{14})/gi, // Sem formatação
+    ]
+
+    for (const pattern of cnpjPatterns) {
+      const matches = [...texto.matchAll(pattern)]
+      if (matches.length > 0) {
+        proposta.cnpj_ofertante = matches[0][1] || matches[0][0]
+        proposta.cnpj_ofertante = proposta.cnpj_ofertante.replace(/[^\d]/g, "")
+        // Formatar CNPJ
+        if (proposta.cnpj_ofertante.length === 14) {
+          proposta.cnpj_ofertante = proposta.cnpj_ofertante.replace(
+            /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+            "$1.$2.$3/$4-$5",
+          )
+        }
+        console.log(`[v0] ✓ CNPJ encontrado: ${proposta.cnpj_ofertante}`)
+        break
+      }
     }
 
-    // Extrair nome da empresa (procurar por padrões comuns)
     const empresaPatterns = [
-      /(?:BIDMAX|Sistema Informática|Dell|Edge|Vertex|Tech)\s+([^\n]+)/i, // Tenta capturar nomes comuns seguidos de espaço e o resto da linha
-      /(?:Razão Social|Fornecedor|Empresa):\s*([^\n]+)/i,
-      /CNPJ:\s*\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s*.*?([^\n]+)/i, // Captura texto após CNPJ na mesma linha
+      /BIDMAX\s+SOLUÇÕES\s+CORPORATIVAS/i,
+      /Sistema\s+Informática/i,
+      /Dell[\s-]+(?:Technologies|Computadores)/i,
+      /(?:Razão\s+Social|Fornecedor|Empresa|Cliente)[:\s]*([^\n]+)/i,
+      /PROPOSTA\s+COMERCIAL[^\n]*\n+([^\n]+)/i,
     ]
 
     for (const pattern of empresaPatterns) {
       const match = texto.match(pattern)
       if (match) {
         let empresa = match[1] || match[0]
-        empresa = empresa.replace(/CNPJ:.*$/i, "").trim()
-        if (empresa.length > 3 && empresa.length < 100) {
+        empresa = empresa
+          .replace(/CNPJ:.*$/i, "")
+          .replace(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/, "")
+          .trim()
+        if (empresa.length > 3 && empresa.length < 150) {
           proposta.ofertante = empresa
           console.log(`[v0] ✓ Ofertante encontrado: ${proposta.ofertante}`)
           break
@@ -1516,112 +1538,145 @@ async function extractFromCotacoesWithAI(cotacoes, contexto = {}) {
       }
     }
 
-    // Se não encontrou, procurar por nome próximo ao CNPJ
-    if (!proposta.ofertante && cnpjMatch) {
-      const cnpjIndex = texto.indexOf(cnpjMatch[0])
-      const antes = texto.substring(Math.max(0, cnpjIndex - 200), cnpjIndex)
-      const linhas = antes.split("\n").reverse()
-      for (const linha of linhas) {
-        const trimmedLinha = linha.trim()
-        if (
-          trimmedLinha.length > 5 &&
-          trimmedLinha.length < 100 &&
-          !trimmedLinha.toLowerCase().includes("cnpj") &&
-          !trimmedLinha.toLowerCase().includes("data") &&
-          !trimmedLinha.toLowerCase().includes("valor") &&
-          !trimmedLinha.toLowerCase().includes("total") &&
-          !trimmedLinha.toLowerCase().includes("objeto") &&
-          !trimmedLinha.toLowerCase().includes("descrição")
-        ) {
-          proposta.ofertante = trimmedLinha
-          console.log(`[v0] ✓ Ofertante inferido: ${proposta.ofertante}`)
-          break
+    // Se não encontrou, usar nome do arquivo
+    if (!proposta.ofertante) {
+      proposta.ofertante = (cotacao.name || cotacao.filename || cotacao.key || `Fornecedor ${i + 1}`)
+        .replace(/\.(pdf|txt|docx?)$/i, "")
+        .replace(/_/g, " ")
+      console.log(`[v0] ⚠️ Ofertante inferido do nome do arquivo: ${proposta.ofertante}`)
+    }
+
+    const dataPatterns = [
+      /(?:Data|Brasília|São\s+Paulo)[,:\s]*(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})/gi,
+      /(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/g,
+      /(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/g,
+    ]
+
+    const meses = {
+      janeiro: "01",
+      fevereiro: "02",
+      março: "03",
+      abril: "04",
+      maio: "05",
+      junho: "06",
+      julho: "07",
+      agosto: "08",
+      setembro: "09",
+      outubro: "10",
+      novembro: "11",
+      dezembro: "12",
+    }
+
+    for (const pattern of dataPatterns) {
+      const matches = [...texto.matchAll(pattern)]
+      if (matches.length > 0) {
+        const match = matches[0]
+        let dia, mes, ano
+
+        if (match[2] && isNaN(match[2])) {
+          // Formato: "5 de junho de 2025"
+          dia = match[1].padStart(2, "0")
+          mes = meses[match[2].toLowerCase()] || "01"
+          ano = match[3]
+        } else if (match[0].match(/^\d{4}/)) {
+          // Formato: YYYY-MM-DD
+          ano = match[1]
+          mes = match[2].padStart(2, "0")
+          dia = match[3].padStart(2, "0")
+        } else {
+          // Formato: DD/MM/YYYY
+          dia = match[1].padStart(2, "0")
+          mes = match[2].padStart(2, "0")
+          ano = match[3]
         }
+
+        if (ano.length === 2) ano = `20${ano}`
+        proposta.data_cotacao = `${dia}/${mes}/${ano}`
+        console.log(`[v0] ✓ Data encontrada: ${proposta.data_cotacao}`)
+        break
       }
     }
 
-    // Extrair data (formato DD/MM/YYYY ou variações)
-    const dataMatch = texto.match(/\b(\d{1,2})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{2,4})\b/)
-    if (dataMatch) {
-      const dia = dataMatch[1].padStart(2, "0")
-      const mes = dataMatch[2].padStart(2, "0")
-      let ano = dataMatch[3]
-      if (ano.length === 2) ano = `20${ano}` // Assume século 21
-      proposta.data_cotacao = `${dia}/${mes}/${ano}`
-      console.log(`[v0] ✓ Data encontrada: ${proposta.data_cotacao}`)
+    if (!proposta.data_cotacao) {
+      proposta.data_cotacao = new Date().toLocaleDateString("pt-BR")
+      console.log(`[v0] ⚠️ Data não encontrada, usando data atual: ${proposta.data_cotacao}`)
     }
 
-    // Extrair valor total (procurar por R$ seguido de números)
     const valorPatterns = [
-      /(?:Total|Valor Total|Valor Final|Subtotal|Valor da Proposta|Preço Total|Valor Unitário).*?R\$\s*([\d.,]+)/i,
-      /R\$\s*([\d.,]+)/g,
+      /(?:Total|Valor|Preço|Price)[^\d]*(R\$\s*[\d.,]+)/gi,
+      /(?:R\$|RS)\s*([\d.,]+)/gi,
+      /(?:Subtotal|Total\s+do\s+item)[^\d]*([\d.,]+)/gi,
     ]
 
-    let maiorValor = 0
-    let valorEncontrado = ""
-
+    const valoresEncontrados = []
     for (const pattern of valorPatterns) {
-      const matches = texto.matchAll(pattern)
+      const matches = [...texto.matchAll(pattern)]
       for (const match of matches) {
-        const valorStr = match[1].replace(/\./g, "").replace(",", ".")
-        const valor = Number.parseFloat(valorStr)
-        // Considera valores acima de R$ 0,50 e abaixo de R$ 1.000.000,00
-        if (valor > 0.5 && valor < 1000000) {
-          if (valor > maiorValor) {
-            maiorValor = valor
-            valorEncontrado = match[0].trim() // Mantém o R$ original encontrado
-          }
+        let valor = match[1] || match[0]
+        valor = valor.replace(/[^\d.,]/g, "")
+        // Converter para número para comparar
+        const valorNum = Number.parseFloat(valor.replace(/\./g, "").replace(",", "."))
+        if (valorNum > 10) {
+          // Ignorar valores muito pequenos
+          valoresEncontrados.push({ texto: valor, numero: valorNum })
         }
       }
     }
 
-    if (valorEncontrado) {
-      proposta.valor = valorEncontrado
+    if (valoresEncontrados.length > 0) {
+      // Pegar o maior valor (provavelmente o total)
+      valoresEncontrados.sort((a, b) => b.numero - a.numero)
+      proposta.valor = `R$ ${valoresEncontrados[0].texto}`
       console.log(`[v0] ✓ Valor encontrado: ${proposta.valor}`)
+    } else {
+      proposta.valor = "A consultar"
+      console.log(`[v0] ⚠️ Valor não encontrado`)
     }
-
-    // Extrair observações (prazo, garantia, etc)
-    const obsPatterns = [
-      /(?:Prazo de Entrega|Entrega em|Previsão de entrega|Prazo):\s*(.+?)(?:\n|$)/i,
-      /(?:Garantia|Período de Garantia):\s*(.+?)(?:\n|$)/i,
-      /(?:Validade da Proposta|Válido até):\s*(.+?)(?:\n|$)/i,
-      /(?:Condições de Pagamento|Pagamento):\s*(.+?)(?:\n|$)/i,
-    ]
 
     const observacoes = []
-    for (const pattern of obsPatterns) {
-      const match = texto.match(pattern)
-      if (match && match[1]) {
-        const obs = match[1].trim()
-        if (obs.length > 5) {
-          observacoes.push(obs)
-        }
-      }
+
+    // Procurar por prazo de entrega
+    const entregaMatch = texto.match(/(?:entrega|prazo)[^\n]*(\d+)\s*dias?/gi)
+    if (entregaMatch && entregaMatch.length > 0) {
+      observacoes.push(entregaMatch[0].trim())
+    }
+
+    // Procurar por garantia
+    const garantiaMatch = texto.match(/(?:garantia|suporte)[^\n]*(\d+)\s*(?:anos?|meses?)/gi)
+    if (garantiaMatch && garantiaMatch.length > 0) {
+      observacoes.push(garantiaMatch[0].trim())
+    }
+
+    // Procurar por formas de pagamento
+    const pagamentoMatch = texto.match(/(?:pagamento|parcelamento)[^\n]*/gi)
+    if (pagamentoMatch && pagamentoMatch.length > 0) {
+      observacoes.push(pagamentoMatch[0].trim().substring(0, 100))
     }
 
     if (observacoes.length > 0) {
-      proposta.observacao = observacoes.join(" | ")
-      console.log(`[v0] ✓ Observações coletadas: ${proposta.observacao}`)
+      proposta.observacao = observacoes.join("; ")
+    } else {
+      proposta.observacao = "Conforme proposta comercial anexa"
     }
+    console.log(`[v0] ✓ Observação: ${proposta.observacao}`)
 
-    // Valores padrão se não encontrou
-    if (!proposta.ofertante) proposta.ofertante = `Fornecedor ${i + 1}`
-    if (!proposta.cnpj_ofertante) proposta.cnpj_ofertante = "00.000.000/0000-00"
-    if (!proposta.data_cotacao) {
-      const hoje = new Date()
-      proposta.data_cotacao = `${hoje.getDate().toString().padStart(2, "0")}/${(hoje.getMonth() + 1).toString().padStart(2, "0")}/${hoje.getFullYear()}`
-    }
-    if (!proposta.valor) proposta.valor = "R$ 0,00"
-
-    console.log(`[v0] ✅ Proposta ${i + 1} processada:`, JSON.stringify(proposta, null, 2))
     propostas.push(proposta)
+    console.log(`[v0] ✅ Proposta ${i + 1} processada com sucesso`)
   }
 
-  console.log(`\n[v0] === RESUMO FINAL DA EXTRAÇÃO ===`)
-  console.log(`[v0] Total de propostas geradas: ${propostas.length}`)
+  console.log(`\n[v0] ========== RESULTADO FINAL ==========`)
+  console.log(`[v0] Total de propostas extraídas: ${propostas.length}`)
+  propostas.forEach((p, i) => {
+    console.log(`[v0] Proposta ${i + 1}:`)
+    console.log(`[v0]   - Ofertante: ${p.ofertante}`)
+    console.log(`[v0]   - CNPJ: ${p.cnpj_ofertante}`)
+    console.log(`[v0]   - Data: ${p.data_cotacao}`)
+    console.log(`[v0]   - Valor: ${p.valor}`)
+    console.log(`[v0]   - Observação: ${p.observacao}`)
+  })
 
   return {
-    objeto: contexto.rubrica || "Objeto não especificado",
+    objeto: contexto.rubrica || "Objeto conforme especificação do certame",
     propostas,
   }
 }
