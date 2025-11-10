@@ -1194,6 +1194,8 @@ async function pdfToTextFromBuffer(buf) {
 }
 
 async function parseCotacoes(cotacoes = []) {
+  console.log("[v0] parseCotacoes: Processando", cotacoes?.length || 0, "cotações")
+
   const out = []
   for (const c of cotacoes || []) {
     let name = "cotacao.pdf"
@@ -1210,49 +1212,87 @@ async function parseCotacoes(cotacoes = []) {
         .pop()
       if (clean) {
         const p = join(process.cwd(), "data", "uploads", clean)
+        console.log("[v0] Tentando ler arquivo:", p)
         if (fs.existsSync(p)) {
           try {
             buffer = fs.readFileSync(p)
-          } catch {}
+            console.log("[v0] ✓ Arquivo lido com sucesso:", clean, "(", buffer.length, "bytes )")
+          } catch (err) {
+            console.log("[v0] ✗ Erro ao ler arquivo:", err.message)
+          }
+        } else {
+          console.log("[v0] ✗ Arquivo não encontrado:", p)
         }
       }
     } else if (c && typeof c === "object") {
       name = String(c?.name || c?.filename || c?.fileName || name)
       text = String(c?.text || "")
+
+      console.log("[v0] Processando objeto cotação:", {
+        name,
+        hasText: !!text,
+        hasBase64: !!c?.base64,
+        hasPath: !!c?.path,
+        hasUrl: !!c?.url,
+      })
+
       if (!text) {
         if (c?.base64) {
           try {
             const b64 = c.base64.replace(/^data:.*;base64,/, "")
             buffer = Buffer.from(b64, "base64")
-          } catch {}
+            console.log("[v0] ✓ Buffer criado de base64 (", buffer.length, "bytes )")
+          } catch (err) {
+            console.log("[v0] ✗ Erro ao decodificar base64:", err.message)
+          }
         } else if (c?.path && fs.existsSync(c.path)) {
           try {
             buffer = fs.readFileSync(c.path)
-          } catch {}
+            console.log("[v0] ✓ Arquivo lido do path:", c.path, "(", buffer.length, "bytes )")
+          } catch (err) {
+            console.log("[v0] ✗ Erro ao ler do path:", err.message)
+          }
         } else if (c?.url) {
           try {
             const base = `http://localhost:${process.env.PORT || 3000}`
             const u = new URL(c.url, base)
+            console.log("[v0] Tentando ler de URL:", u.pathname)
             if (u.pathname.startsWith("/uploads/")) {
               const file = decodeURIComponent(u.pathname.split("/").pop())
               const p = join(process.cwd(), "data", "uploads", file)
-              if (fs.existsSync(p)) buffer = fs.readFileSync(p)
+              console.log("[v0] Path extraído da URL:", p)
+              if (fs.existsSync(p)) {
+                buffer = fs.readFileSync(p)
+                console.log("[v0] ✓ Arquivo lido da URL (", buffer.length, "bytes )")
+              } else {
+                console.log("[v0] ✗ Arquivo não encontrado na URL:", p)
+              }
             }
-          } catch {}
+          } catch (err) {
+            console.log("[v0] ✗ Erro ao processar URL:", err.message)
+          }
         }
       }
     }
 
-    if (buffer) {
+    if (buffer && buffer.length > 0) {
+      console.log("[v0] Extraindo texto do PDF...")
       text = await pdfToTextFromBuffer(buffer)
+      console.log("[v0] ✓ Texto extraído:", text?.length || 0, "caracteres")
     }
 
-    if (text) {
+    if (text && text.length > 0) {
       out.push({ name, text })
-    } else if (c && typeof c === "object" && (c.name || c.filename)) {
-      out.push({ name: c.name || c.filename, text: "" }) // Manter o nome mesmo sem texto
+      console.log("[v0] ✓ Cotação adicionada:", name)
+    } else {
+      console.log("[v0] ⚠ Cotação sem texto:", name)
+      if (c && typeof c === "object" && (c.name || c.filename)) {
+        out.push({ name: c.name || c.filename, text: "" })
+      }
     }
   }
+
+  console.log("[v0] parseCotacoes: Total de cotações processadas:", out.length)
   return out
 }
 
@@ -1320,110 +1360,157 @@ async function extractCotacoesFromFiles(cotacoes = [], { instituicao = "", rubri
 }
 
 async function extractFromCotacoesWithAI({ instituicao = "", rubrica = "", cotacoes = [] } = {}) {
-  if (!hasOpenAI) return { objeto: "", propostas: [] }
-  try {
-    const client = ensureOpenAIClient()
-    if (!client) return { objeto: "", propostas: [] }
+  console.log("[v0] extractFromCotacoesWithAI iniciado")
+  console.log("[v0] Parâmetros:", {
+    instituicao,
+    rubrica,
+    has_lista_cotacoes: cotacoes?.length > 0,
+    cotacoes_arquivos_count: cotacoes?.length || 0,
+  })
 
-    const blocks = (cotacoes || [])
-      .map((c, idx) => {
-        const name = c?.name || c?.filename || c?.fileName || `Cotacao_${idx + 1}`
-        const text = String(c?.text || "").slice(0, 20000)
-        return `### COTAÇÃO ${idx + 1} (${name})\n${text}`
-      })
-      .filter(Boolean)
-
-    if (!blocks.length) return { objeto: "", propostas: [] }
-
-    const resp = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "Você extrai dados estruturados de cotações comerciais e responde em JSON válido." },
-        {
-          role: "user",
-          content: `Instituição: ${instituicao || ""}\nRubrica: ${rubrica || ""}\n\nAnalise as cotações a seguir e extraia:\n- objeto: descrição do que está sendo cotado\n- propostas: array com dados de cada fornecedor (selecao, ofertante, cnpj_ofertante, data_cotacao, valor)\n\n${blocks.join("\n\n")}`,
-        },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "cotacao_mapa",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              objeto: {
-                type: "string",
-                description: "Descrição do objeto da cotação",
-              },
-              propostas: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    selecao: { type: "string", description: "Identificação da proposta (ex: Cotação 1)" },
-                    ofertante: { type: "string", description: "Nome do fornecedor/ofertante" },
-                    cnpj_ofertante: { type: "string", description: "CNPJ ou CPF do ofertante" },
-                    data_cotacao: { type: "string", description: "Data da cotação no formato DD/MM/YYYY" },
-                    valor: { type: "string", description: "Valor da cotação formatado como R$ X.XXX,XX" },
-                  },
-                  required: ["selecao", "ofertante", "cnpj_ofertante", "data_cotacao", "valor"],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ["objeto", "propostas"],
-            additionalProperties: false,
-          },
-        },
-      },
-      temperature: 0.2,
-    })
-
-    const raw = resp.choices?.[0]?.message?.content || "{}"
-
-    let data
-    try {
-      data = JSON.parse(raw)
-    } catch {
-      data = {}
-    }
-
-    const objeto = typeof data.objeto === "string" ? data.objeto.trim() : ""
-    const propostas = Array.isArray(data.propostas)
-      ? data.propostas.map((p, idx) => ({
-          selecao: p.selecao || `Cotação ${idx + 1}`,
-          ofertante: p.ofertante || "",
-          cnpj_ofertante: p.cnpj_ofertante || p.cnpj || "",
-          data_cotacao: p.data_cotacao || p.dataCotacao || p.data || "",
-          valor: p.valor || p.valorBR || "",
-        }))
-      : []
-
-    console.log("[v0] IA extraiu com sucesso:", { objeto, propostas_count: propostas.length })
-    return { objeto, propostas }
-  } catch (err) {
-    const code = err?.status || err?.statusCode || err?.code
-    const msg = String(err?.message || "").toLowerCase()
-
-    console.error("[v0] Erro na extração com IA:", {
-      code,
-      message: err?.message,
-      error: err?.error?.message || err?.error,
-    })
-
-    if (code === 401 || code === "401" || msg.includes("incorrect api key") || msg.includes("invalid api key")) {
-      invalidateOpenAIClient()
-      throw new Error("OPENAI_KEY_INVALID")
-    }
-
-    if (code === 400 || code === "400") {
-      throw new Error(`OPENAI_SCHEMA_ERROR: ${err?.message || "Schema inválido"}`)
-    }
-
-    console.warn("[v0] extractFromCotacoesWithAI falhou:", err?.message || err)
+  if (!hasOpenAI) {
+    console.log("[v0] OpenAI não configurado, retornando vazio")
     return { objeto: "", propostas: [] }
   }
+
+  console.log("[v0] requireClient: Verificando cliente OpenAI...")
+
+  const MAX_TENTATIVAS = 3
+  let lastError = null
+
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    try {
+      console.log("[v0] Tentativa", tentativa + "/" + MAX_TENTATIVAS)
+
+      const client = ensureOpenAIClient()
+      if (!client) {
+        console.log("[v0] Cliente OpenAI não disponível")
+        return { objeto: "", propostas: [] }
+      }
+      console.log("[v0] requireClient: Cliente obtido: true")
+      console.log("[v0] ✓ Cliente OpenAI pronto para extração")
+      console.log("[v0] Calling OpenAI API for extraction...")
+
+      const blocks = (cotacoes || [])
+        .map((c, idx) => {
+          const name = c?.name || c?.filename || c?.fileName || `Cotacao_${idx + 1}`
+          const text = String(c?.text || "").slice(0, 20000)
+          return `### COTAÇÃO ${idx + 1} (${name})\n${text}`
+        })
+        .filter(Boolean)
+
+      if (!blocks.length) {
+        console.log("[v0] Nenhum bloco de texto para processar")
+        return { objeto: "", propostas: [] }
+      }
+
+      const resp = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Você extrai dados estruturados de cotações comerciais e responde em JSON válido.",
+          },
+          {
+            role: "user",
+            content: `Instituição: ${instituicao || ""}\nRubrica: ${rubrica || ""}\n\nAnalise as cotações a seguir e extraia:\n- objeto: descrição do que está sendo cotado\n- propostas: array com dados de cada fornecedor (selecao, ofertante, cnpj_ofertante, data_cotacao, valor, observacao)\n\n${blocks.join("\n\n")}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "cotacao_mapa",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                objeto: {
+                  type: "string",
+                  description: "Descrição do objeto da cotação",
+                },
+                propostas: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      selecao: { type: "string", description: "Identificação da proposta (ex: Cotação 1)" },
+                      ofertante: { type: "string", description: "Nome do fornecedor/ofertante" },
+                      cnpj_ofertante: { type: "string", description: "CNPJ ou CPF do ofertante" },
+                      data_cotacao: { type: "string", description: "Data da cotação no formato DD/MM/YYYY" },
+                      valor: { type: "string", description: "Valor da cotação formatado como R$ X.XXX,XX" },
+                      observacao: { type: "string", description: "Observações adicionais sobre a proposta" },
+                    },
+                    required: ["selecao", "ofertante", "cnpj_ofertante", "data_cotacao", "valor", "observacao"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["objeto", "propostas"],
+              additionalProperties: false,
+            },
+          },
+        },
+        temperature: 0.2,
+      })
+
+      const raw = resp.choices?.[0]?.message?.content || "{}"
+
+      let data
+      try {
+        data = JSON.parse(raw)
+      } catch {
+        data = {}
+      }
+
+      const objeto = typeof data.objeto === "string" ? data.objeto.trim() : ""
+      const propostas = Array.isArray(data.propostas)
+        ? data.propostas.map((p, idx) => ({
+            selecao: p.selecao || `Cotação ${idx + 1}`,
+            ofertante: p.ofertante || "",
+            cnpj_ofertante: p.cnpj_ofertante || p.cnpj || "",
+            data_cotacao: p.data_cotacao || p.dataCotacao || p.data || "",
+            valor: p.valor || p.valorBR || "",
+            observacao: p.observacao || "", // Adicionado observacao
+          }))
+        : []
+
+      console.log("[v0] ✅ IA extraiu com sucesso:", { objeto, propostas_count: propostas.length })
+      return { objeto, propostas }
+    } catch (err) {
+      lastError = err
+      const code = err?.status || err?.statusCode || err?.code
+      const msg = String(err?.message || "").toLowerCase()
+
+      console.error(`[v0] Erro na tentativa ${tentativa}:`, {
+        code,
+        message: err?.message,
+        error: err?.error?.message || err?.error,
+      })
+
+      if (code === 401 || code === "401" || msg.includes("incorrect api key") || msg.includes("invalid api key")) {
+        console.log("[v0] ❌ Chave da OpenAI inválida ou expirada (erro 401). Verifique a chave na seção 'Vars' do v0.")
+        console.log("[v0] Invalidando cliente OpenAI (será recriado na próxima chamada)")
+        invalidateOpenAIClient()
+        // Não tenta novamente se for erro de autenticação
+        break
+      }
+
+      if (code === 400 || code === "400") {
+        console.log(`[v0] ❌ Erro na requisição OpenAI (erro 400): ${err?.message || "Schema inválido"}`)
+        // Não tenta novamente se for erro de schema
+        break
+      }
+
+      if (tentativa < MAX_TENTATIVAS) {
+        console.log(`[v0] Aguardando antes da próxima tentativa...`)
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+    }
+  }
+
+  console.log("[v0] ❌ Todas as", MAX_TENTATIVAS, "tentativas falharam")
+  console.warn("[v0] extractFromCotacoesWithAI falhou:", lastError?.message || lastError)
+  return { objeto: "", propostas: [] }
 }
 
 function guessFieldsFromText(txt = "") {
@@ -1728,6 +1815,7 @@ if (useLegacyMapaRoute) {
         data_cotacao: p.data_cotacao || p.data || p.dataCotacao || p.dataCotacaoBR || "",
         data: p.data || p.data_cotacao || p.dataCotacao || p.dataCotacaoBR || "",
         valor: p.valor || p.valorBR || p.total || "",
+        observacao: p.observacao || "", // Adicionado observacao
       }))
 
       console.log("[v0] propsForTemplate count:", propsForTemplate.length)
@@ -1893,6 +1981,9 @@ function startServer(port = DEFAULT_PORT) {
 }
 
 console.log("[server] ========================================")
+console.log("[server] 📋 Iniciando aplicação...")
+console.log("[server] ========================================")
+startServer().log("[server] ========================================")
 console.log("[server] 📋 Iniciando aplicação...")
 console.log("[server] ========================================")
 startServer()
