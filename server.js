@@ -1298,8 +1298,21 @@ async function lerConteudoPDF(cot) {
   return texto.replace(/\u0000/g, " ").trim()
 }
 
-// Início da atualização do código: Simplificando drasticamente a função de extração
 async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
+  // Timeout de segurança de 30 segundos
+  return Promise.race([
+    extractFromCotacoesWithAIInternal(cotacoes, dadosLinha),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout na extração de cotações")), 30000)),
+  ]).catch((error) => {
+    console.error("[v0] ❌ ERRO FATAL na extração:", error.message)
+    return {
+      objeto: dadosLinha?.objeto || "Sem descrição",
+      propostas: [],
+    }
+  })
+}
+
+async function extractFromCotacoesWithAIInternal(cotacoes, dadosLinha) {
   console.log("[v0] ========== INICIANDO EXTRAÇÃO DE COTAÇÕES ==========")
   console.log("[v0] Total de cotações recebidas:", cotacoes?.length || 0)
 
@@ -1453,7 +1466,6 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
 
   return { objeto, propostas }
 }
-// Fim da atualização do código
 
 /* ---- Endpoints diretos (mantidos antes do generateDocsRouter) ---- */
 // FOLHA DE ROSTO
@@ -1827,5 +1839,7 @@ startServer()
 startServer()
 
 startServer()
+
+startServer()()
 
 startServer()
