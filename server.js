@@ -1306,39 +1306,33 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
   const propostas = []
   let objetoGlobal = ""
 
-  // Se não tem cotações, retorna vazio
   if (!cotacoes || cotacoes.length === 0) {
-    console.log("[v0] ⚠️ Nenhuma cotação fornecida")
+    console.log("[v0] Nenhuma cotação fornecida")
     return { objeto: "", propostas: [] }
   }
 
   for (let i = 0; i < cotacoes.length; i++) {
     const cot = cotacoes[i]
-    console.log(`\n[v0] ========== Processando Cotação ${i + 1}/${cotacoes.length} ==========`)
-    console.log(`[v0] Cotação ${i + 1} - Objeto completo:`, JSON.stringify(cot, null, 2))
+    console.log(`[v0] Processando Cotação ${i + 1}/${cotacoes.length}`)
 
     let texto = ""
     const nomeArquivo = cot?.name || cot?.filename || cot?.originalname || `Fornecedor ${i + 1}`
 
     try {
-      // Estratégia 1: Se já tem texto extraído
+      // Estratégia 1: Texto pré-extraído
       if (cot?.text && typeof cot.text === "string" && cot.text.length > 50) {
         texto = cot.text
-        console.log(`[v0] ✓ Cotação ${i + 1} - Usando texto pré-extraído (${texto.length} chars)`)
+        console.log(`[v0] Usando texto pré-extraído (${texto.length} chars)`)
       }
-      // Estratégia 2: Se tem caminho para o arquivo
+      // Estratégia 2: Ler do filesystem
       else if (cot?.path || cot?.filepath || cot?.filename) {
         const paths = [cot.path, cot.filepath, cot.filename, cot.key, cot.url].filter(Boolean)
-
-        console.log(`[v0] Cotação ${i + 1} - Tentando ler de paths:`, paths)
+        console.log(`[v0] Tentando ler de paths:`, paths)
 
         for (const p of paths) {
           if (!p) continue
 
-          // Remove prefixos de URL
           const cleanPath = p.replace(/^https?:\/\/[^/]+\//, "").replace(/^\/+/, "")
-
-          // Tenta múltiplos caminhos possíveis
           const possiblePaths = [
             cleanPath,
             `data/${cleanPath}`,
@@ -1349,33 +1343,30 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
             path.join(__dirname, "data", "uploads", cleanPath),
           ]
 
-          console.log(`[v0] Cotação ${i + 1} - Caminhos a testar:`, possiblePaths)
-
           for (const testPath of possiblePaths) {
             try {
               if (fs.existsSync(testPath)) {
-                console.log(`[v0] ✓ Arquivo encontrado em: ${testPath}`)
+                console.log(`[v0] Arquivo encontrado em: ${testPath}`)
                 const buffer = fs.readFileSync(testPath)
 
-                // Verifica se é PDF pelo magic number
+                // Verifica se é PDF
                 const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
 
                 if (isPDF) {
-                  console.log(`[v0] ✓ Arquivo é PDF, extraindo texto...`)
+                  console.log(`[v0] Arquivo é PDF, extraindo texto...`)
                   const pdfParse = (await import("pdf-parse")).default
                   const pdfData = await pdfParse(buffer)
                   texto = pdfData.text
-                  console.log(`[v0] ✓ PDF parseado com sucesso (${texto.length} chars)`)
+                  console.log(`[v0] PDF parseado com sucesso (${texto.length} chars)`)
                   break
                 } else {
-                  // Assume que é texto puro
                   texto = buffer.toString("utf-8")
-                  console.log(`[v0] ✓ Arquivo lido como texto (${texto.length} chars)`)
+                  console.log(`[v0] Arquivo lido como texto (${texto.length} chars)`)
                   break
                 }
               }
             } catch (err) {
-              console.log(`[v0] ✗ Erro ao ler ${testPath}:`, err.message)
+              console.log(`[v0] Erro ao ler ${testPath}:`, err.message)
               continue
             }
           }
@@ -1384,9 +1375,9 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
         }
       }
 
-      // Estratégia 3: Se tem data em base64
+      // Estratégia 3: Base64
       if (!texto && cot?.data) {
-        console.log(`[v0] Cotação ${i + 1} - Tentando decodificar base64...`)
+        console.log(`[v0] Tentando decodificar base64...`)
         try {
           const buffer = Buffer.from(cot.data, "base64")
           const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
@@ -1395,18 +1386,18 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
             const pdfParse = (await import("pdf-parse")).default
             const pdfData = await pdfParse(buffer)
             texto = pdfData.text
-            console.log(`[v0] ✓ PDF base64 parseado (${texto.length} chars)`)
+            console.log(`[v0] PDF base64 parseado (${texto.length} chars)`)
           } else {
             texto = buffer.toString("utf-8")
-            console.log(`[v0] ✓ Texto base64 decodificado (${texto.length} chars)`)
+            console.log(`[v0] Texto base64 decodificado (${texto.length} chars)`)
           }
         } catch (err) {
-          console.log(`[v0] ✗ Erro ao decodificar base64:`, err.message)
+          console.log(`[v0] Erro ao decodificar base64:`, err.message)
         }
       }
 
       if (!texto || texto.length < 50) {
-        console.warn(`[v0] ⚠️ Cotação ${i + 1} - FALHA: Não foi possível extrair texto do PDF`)
+        console.warn(`[v0] FALHA: Não foi possível extrair texto do PDF`)
         propostas.push({
           selecao: `Cotação ${i + 1}`,
           ofertante: nomeArquivo,
@@ -1418,166 +1409,125 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
         continue
       }
 
-      console.log(`[v0] Cotação ${i + 1} - ✓ TEXTO EXTRAÍDO COM SUCESSO`)
-      console.log(`[v0] Cotação ${i + 1} - Primeiros 300 caracteres:`)
-      console.log(texto.substring(0, 300))
-      console.log(`[v0] Cotação ${i + 1} - Últimos 150 caracteres:`)
-      console.log(texto.substring(Math.max(0, texto.length - 150)))
+      console.log(`[v0] TEXTO EXTRAÍDO COM SUCESSO`)
+      console.log(`[v0] Primeiros 300 caracteres:`, texto.substring(0, 300))
 
-      // ========== PARSER DETERMINÍSTICO ==========
-      console.log(`[v0] Cotação ${i + 1} - Iniciando parsing com regex...`)
+      // Parser determinístico
+      console.log(`[v0] Iniciando parsing com regex...`)
 
       // 1. CNPJ
       let cnpj = ""
-      const cnpjPatterns = [
-        /CNPJ[:\s]*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/gi,
-        /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/g,
-        /(\d{14})/g,
-      ]
+      const cnpjRegex1 = /CNPJ[:\s]*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/gi
+      const cnpjRegex2 = /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/g
+      const cnpjRegex3 = /(\d{14})/g
 
-      for (const pattern of cnpjPatterns) {
-        const matches = [...texto.matchAll(pattern)]
-        if (matches.length > 0) {
-          cnpj = matches[0][1].replace(/[^\d]/g, "")
-          // Formata o CNPJ
-          if (cnpj.length === 14) {
-            cnpj = `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`
-          }
-          console.log(`[v0] Cotação ${i + 1} - ✓ CNPJ encontrado: ${cnpj}`)
-          break
+      let matchCnpj = texto.match(cnpjRegex1)
+      if (!matchCnpj) matchCnpj = texto.match(cnpjRegex2)
+      if (!matchCnpj) matchCnpj = texto.match(cnpjRegex3)
+
+      if (matchCnpj) {
+        cnpj = matchCnpj[0].replace(/[^\d]/g, "")
+        if (cnpj.length === 14) {
+          cnpj = `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`
         }
+        console.log(`[v0] CNPJ encontrado: ${cnpj}`)
       }
-      if (!cnpj) console.log(`[v0] Cotação ${i + 1} - ✗ CNPJ não encontrado`)
 
-      // 2. Nome da empresa/ofertante
+      // 2. Nome da empresa
       let ofertante = ""
-      const empresaPatterns = [
-        /(?:BIDMAX SOLU[ÇC][ÕO]ES CORPORATIVAS|Sistema Inform[áa]tica|Dell Technologies)/i,
-        /Raz[ãa]o Social[:\s]*([^\n\r]{3,80})/i,
-        /Empresa[:\s]*([^\n\r]{3,80})/i,
-        /Fornecedor[:\s]*([^\n\r]{3,80})/i,
-        /(?:Cliente|[ÓO]rg[ãa]o)[:\s]*([^\n\r]{3,80})/i,
-      ]
+      const empresaRegex1 = /BIDMAX SOLU[ÇC][ÕO]ES CORPORATIVAS/i
+      const empresaRegex2 = /Sistema Inform[áa]tica/i
+      const empresaRegex3 = /Dell Technologies/i
+      const empresaRegex4 = /Raz[ãa]o Social[:\s]*([^\n\r]{3,80})/i
 
-      for (const pattern of empresaPatterns) {
-        const match = texto.match(pattern)
-        if (match) {
-          ofertante = (match[1] || match[0]).trim().replace(/[:\s]+$/, "")
-          console.log(`[v0] Cotação ${i + 1} - ✓ Ofertante encontrado: ${ofertante}`)
-          break
+      if (empresaRegex1.test(texto)) {
+        ofertante = "BIDMAX SOLUÇÕES CORPORATIVAS"
+      } else if (empresaRegex2.test(texto)) {
+        ofertante = "Sistema Informática"
+      } else if (empresaRegex3.test(texto)) {
+        ofertante = "Dell Technologies"
+      } else {
+        const matchEmpresa = texto.match(empresaRegex4)
+        if (matchEmpresa) {
+          ofertante = matchEmpresa[1].trim()
         }
       }
 
       if (!ofertante) {
         ofertante = nomeArquivo.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ")
-        console.log(`[v0] Cotação ${i + 1} - Ofertante fallback (nome arquivo): ${ofertante}`)
       }
+      console.log(`[v0] Ofertante: ${ofertante}`)
 
       // 3. Data
       let data = ""
-      const mesesPT = {
-        janeiro: "01",
-        fevereiro: "02",
-        março: "03",
-        marco: "03",
-        abril: "04",
-        maio: "05",
-        junho: "06",
-        julho: "07",
-        agosto: "08",
-        setembro: "09",
-        outubro: "10",
-        novembro: "11",
-        dezembro: "12",
-      }
+      const dataRegex1 = /(\d{1,2})\/(\d{1,2})\/(\d{4})/
+      const dataRegex2 =
+        /(\d{1,2})\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i
 
-      const dataPatterns = [
-        /(\d{1,2})\/(\d{1,2})\/(\d{4})/,
-        /(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})/i,
-        /Data[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/i,
-      ]
+      const matchData1 = texto.match(dataRegex1)
+      const matchData2 = texto.match(dataRegex2)
 
-      for (const pattern of dataPatterns) {
-        const match = texto.match(pattern)
-        if (match) {
-          if (match[0].includes("/")) {
-            data = `${match[1].padStart(2, "0")}/${match[2].padStart(2, "0")}/${match[3]}`
-          } else {
-            const mes = Object.keys(mesesPT).find((m) => new RegExp(m, "i").test(match[2]))
-            if (mes) {
-              data = `${match[1].padStart(2, "0")}/${mesesPT[mes]}/${match[3]}`
-            }
-          }
-          if (data) {
-            console.log(`[v0] Cotação ${i + 1} - ✓ Data encontrada: ${data}`)
-            break
-          }
+      if (matchData1) {
+        data = `${matchData1[1].padStart(2, "0")}/${matchData1[2].padStart(2, "0")}/${matchData1[3]}`
+      } else if (matchData2) {
+        const meses = {
+          janeiro: "01",
+          fevereiro: "02",
+          março: "03",
+          marco: "03",
+          abril: "04",
+          maio: "05",
+          junho: "06",
+          julho: "07",
+          agosto: "08",
+          setembro: "09",
+          outubro: "10",
+          novembro: "11",
+          dezembro: "12",
+        }
+        const mes = meses[matchData2[2].toLowerCase()]
+        if (mes) {
+          data = `${matchData2[1].padStart(2, "0")}/${mes}/${matchData2[3]}`
         }
       }
-      if (!data) console.log(`[v0] Cotação ${i + 1} - ✗ Data não encontrada`)
+      console.log(`[v0] Data: ${data || "(não encontrada)"}`)
 
       // 4. Valor
       let valor = ""
-      const valorPatterns = [/(?:Total|Subtotal|Valor Total)[:\s]*R\$\s*([\d.,]+)/i, /R\$\s*([\d.,]+)/g]
-
+      const valorRegex = /R\$\s*([\d.,]+)/g
       let maiorValor = 0
-      for (const pattern of valorPatterns) {
-        const matches = [...texto.matchAll(pattern)]
-        for (const match of matches) {
-          const numStr = match[1].replace(/\./g, "").replace(",", ".")
-          const num = Number.parseFloat(numStr)
-          if (!isNaN(num) && num > maiorValor) {
-            maiorValor = num
-            valor = `R$ ${num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-          }
+      let match
+
+      while ((match = valorRegex.exec(texto)) !== null) {
+        const numStr = match[1].replace(/\./g, "").replace(",", ".")
+        const num = Number.parseFloat(numStr)
+        if (!isNaN(num) && num > maiorValor) {
+          maiorValor = num
+          valor = `R$ ${num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         }
       }
-
-      if (valor) {
-        console.log(`[v0] Cotação ${i + 1} - ✓ Valor encontrado: ${valor}`)
-      } else {
-        console.log(`[v0] Cotação ${i + 1} - ✗ Valor não encontrado`)
-      }
+      console.log(`[v0] Valor: ${valor || "(não encontrado)"}`)
 
       // 5. Observações
       let observacao = "Conforme proposta anexa"
-      const obsPatterns = [
-        /(?:Prazo de entrega|Entrega)[:\s]*([^\n\r]{5,100})/i,
-        /(?:Garantia)[:\s]*([^\n\r]{5,100})/i,
-        /(?:Forma de pagamento|Pagamento)[:\s]*([^\n\r]{5,100})/i,
-      ]
-
-      const obsTexts = []
-      for (const pattern of obsPatterns) {
-        const match = texto.match(pattern)
-        if (match) {
-          obsTexts.push(match[1].trim())
-        }
+      const obsRegex = /(?:Prazo de entrega|Entrega|Garantia|Forma de pagamento)[:\s]*([^\n\r]{5,100})/i
+      const matchObs = texto.match(obsRegex)
+      if (matchObs) {
+        observacao = matchObs[1].trim()
       }
+      console.log(`[v0] Observação: ${observacao}`)
 
-      if (obsTexts.length > 0) {
-        observacao = obsTexts.join("; ")
-        console.log(`[v0] Cotação ${i + 1} - ✓ Observação: ${observacao}`)
-      }
-
-      // 6. Objeto (apenas na primeira cotação)
+      // 6. Objeto (apenas primeira cotação)
       if (i === 0 && !objetoGlobal) {
-        const objetoPatterns = [
-          /(?:Objeto|Descrição|Descricao)[:\s]*([^\n\r]{10,200})/i,
-          /(?:Item|Produto)[:\s]*([^\n\r]{10,200})/i,
-        ]
-
-        for (const pattern of objetoPatterns) {
-          const match = texto.match(pattern)
-          if (match) {
-            objetoGlobal = match[1].trim()
-            console.log(`[v0] ✓ Objeto global encontrado: ${objetoGlobal}`)
-            break
-          }
+        const objetoRegex = /(?:Objeto|Item|Produto)[:\s]*([^\n\r]{10,200})/i
+        const matchObjeto = texto.match(objetoRegex)
+        if (matchObjeto) {
+          objetoGlobal = matchObjeto[1].trim()
+          console.log(`[v0] Objeto global: ${objetoGlobal}`)
         }
       }
 
-      // Adiciona a proposta extraída
+      // Adiciona proposta
       const proposta = {
         selecao: `Cotação ${i + 1}`,
         ofertante: ofertante || nomeArquivo,
@@ -1587,10 +1537,10 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
         observacao: observacao,
       }
 
-      console.log(`[v0] Cotação ${i + 1} - ✓ PROPOSTA CRIADA:`, JSON.stringify(proposta, null, 2))
+      console.log(`[v0] PROPOSTA CRIADA:`, JSON.stringify(proposta, null, 2))
       propostas.push(proposta)
     } catch (error) {
-      console.error(`[v0] ✗ Cotação ${i + 1} - ERRO FATAL:`, error)
+      console.error(`[v0] ERRO FATAL:`, error)
       propostas.push({
         selecao: `Cotação ${i + 1}`,
         ofertante: nomeArquivo,
@@ -1602,10 +1552,9 @@ async function extractFromCotacoesWithAI(cotacoes, dadosLinha) {
     }
   }
 
-  console.log(`\n[v0] ========== EXTRAÇÃO FINALIZADA ==========`)
-  console.log(`[v0] Total de propostas extraídas: ${propostas.length}`)
-  console.log(`[v0] Objeto global: ${objetoGlobal || "(não encontrado)"}`)
-  console.log(`[v0] Propostas: `, JSON.stringify(propostas, null, 2))
+  console.log(`[v0] EXTRAÇÃO FINALIZADA`)
+  console.log(`[v0] Total de propostas: ${propostas.length}`)
+  console.log(`[v0] Objeto: ${objetoGlobal || "(não encontrado)"}`)
 
   return {
     objeto: objetoGlobal || "",
@@ -1972,4 +1921,6 @@ console.log("[server] ========================================")
 console.log("[server] ========================================")
 console.log("[server] 🚀 Iniciando servidor...")
 console.log("[server] ========================================")
+startServer()
+
 startServer()
