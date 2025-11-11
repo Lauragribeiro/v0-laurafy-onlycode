@@ -1648,7 +1648,13 @@ app.post("/api/generate/mapa-cotacao", async (req, res) => {
       warnings_count: warnings.length,
     })
 
-    const buffer = renderDocxFromTemplate(templateName, data, "double")
+    const buffer = await renderDocxFromTemplate(templateName, data, "double")
+
+    if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+      throw new Error("Buffer DOCX inválido gerado")
+    }
+
+    console.log("[v0] Buffer DOCX gerado com sucesso:", buffer.length, "bytes")
 
     res
       .set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
