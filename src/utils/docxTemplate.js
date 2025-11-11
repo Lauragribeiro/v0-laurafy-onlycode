@@ -215,13 +215,15 @@ export function renderDocxBuffer(templateBuffer, data = {}, options = {}) {
   return zip.generate({ type: "nodebuffer", compression: "DEFLATE" })
 }
 
-export function renderDocxFromTemplate(templateName, data = {}, delimiters = "double") {
+export async function renderDocxFromTemplate(templateName, data, mode = "double") {
   const templatePath = path.join(__dirname, "..", "templates", templateName)
 
   if (!fs.existsSync(templatePath)) {
-    throw new Error(`Template não encontrado: ${templatePath}`)
+    const error = new Error(`Template não encontrado: ${templatePath}`)
+    error.path = templatePath
+    throw error
   }
 
   const templateBuffer = fs.readFileSync(templatePath)
-  return renderDocxBuffer(templateBuffer, data, { forceDelimiters: delimiters })
+  return renderDocxBuffer(templateBuffer, data, mode)
 }
