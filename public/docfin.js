@@ -2424,11 +2424,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // tenta encontrar anexos de cotação na linha (documentação)
   function pickCotacoesFromRow(row) {
+    console.log("[v0] ========== pickCotacoesFromRow ==========")
+    console.log("[v0] row.docs.cotacoes:", row?.docs?.cotacoes)
+
     const out = []
 
     // 1) "canonical" structure
     if (Array.isArray(row?.docs?.cotacoes)) {
-      for (const c of row.docs.cotacoes) out.push(c)
+      console.log("[v0] Encontradas", row.docs.cotacoes.length, "cotações em row.docs.cotacoes")
+      for (const c of row.docs.cotacoes) {
+        console.log("[v0] Cotação:", {
+          name: c.name || c.filename,
+          hasData: !!c.data,
+          dataType: typeof c.data,
+          dataLength: c.data?.length,
+          dataIsBuffer: c.data instanceof ArrayBuffer,
+          dataIsString: typeof c.data === "string",
+          dataFirst50: typeof c.data === "string" ? c.data.substring(0, 50) : "not string",
+          keys: Object.keys(c),
+        })
+        out.push(c)
+      }
     }
 
     // 2) alternative common structures: row.documentacao (array of files)
@@ -2446,25 +2462,40 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
     // map to fine format
-    return out.map((c) => ({
-      name: S(c.name || c.filename || c.fileName || "cotacao.pdf"),
-      text: S(c.text || ""),
-      url: S(c.url || c.link || ""),
-      path: S(c.path || ""),
-      savedPath: S(c.savedPath || c.saved_path || ""),
-      data: c.data || c.content || c.buffer || c.extractedText || null, // Include all possible data fields
-      extractedText: S(c.extractedText || c.extracted_text || c.text || ""),
-      filename: S(
-        c.filename ||
-          c.key ||
-          (S(c.url || "").startsWith("/uploads/")
-            ? S(c.url || "")
-                .split("/")
-                .pop()
-            : ""),
-      ),
-      originalname: S(c.originalname || c.name || c.fileName || ""),
-    }))
+    const mapped = out.map((c) => {
+      const result = {
+        name: S(c.name || c.filename || c.fileName || "cotacao.pdf"),
+        text: S(c.text || ""),
+        url: S(c.url || c.link || ""),
+        path: S(c.path || ""),
+        savedPath: S(c.savedPath || c.saved_path || ""),
+        data: c.data || c.content || c.buffer || c.extractedText || null, // Include all possible data fields
+        extractedText: S(c.extractedText || c.extracted_text || c.text || ""),
+        filename: S(
+          c.filename ||
+            c.key ||
+            (S(c.url || "").startsWith("/uploads/")
+              ? S(c.url || "")
+                  .split("/")
+                  .pop()
+              : ""),
+        ),
+        originalname: S(c.originalname || c.name || c.fileName || ""),
+      }
+
+      console.log("[v0] Mapped cotação:", {
+        name: result.name,
+        hasData: !!result.data,
+        dataType: typeof result.data,
+        dataLength: result.data?.length,
+      })
+
+      return result
+    })
+
+    console.log("[v0] Total mapeadas:", mapped.length)
+    console.log("[v0] ========== FIM pickCotacoesFromRow ==========")
+    return mapped
   }
 
   function normalizaPropostas(raw) {
@@ -2728,30 +2759,37 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function buildPayloadMapa() {
+    console.log("[v0] ========== BUILD PAYLOAD MAPA ==========")
     const proj = window.currentProject || {}
     const row = getSelectedRowFromModal()
-    if (!row) return { error: "Abra/seleciona uma linha antes de gerar o Mapa." }
+    if (!row) return { error: "Abra/seleciona uma linha antes de gerar o Mapa de Cotação." }
 
     const natureza = getNaturezaDisp(row)
     const cotacoesSlim = pickCotacoesFromRow(row)
-    const cotacoesUploads = Array.isArray(row?.docs?.cotacoes) ? row.docs.cotacoes : []
 
-    console.log("[v0] ========== BUILD PAYLOAD MAPA ==========")
-    console.log("[v0] buildPayloadMapa - Dados da linha:", {
-      favorecido: row.favorecido,
-      valor: row.valor,
-      cotacoes_count: cotacoesSlim.length,
-      cotacoes_uploads_count: cotacoesUploads.length,
-      row_keys: Object.keys(row),
+    console.log("[v0] cotacoesSlim após pickCotacoesFromRow:", {
+      length: cotacoesSlim.length,
+      items: cotacoesSlim.map((c) => ({
+        name: c.name,
+        hasData: !!c.data,
+        dataType: typeof c.data,
+        dataLength: c.data?.length,
+      })),
     })
+
+    const cotacoesUploads = Array.isArray(row?.docs?.cotacoes) ? row.docs.cotacoes : []
 
     console.log(
       "[v0] Cotações slim:",
       cotacoesSlim.map((c) => ({
         name: c.name,
         hasData: !!c.data,
+        dataType: typeof c.data,
         dataLength: c.data?.length,
-        type: c.type,
+        dataIsBuffer: c.data instanceof ArrayBuffer,
+        dataIsString: typeof c.data === "string",
+        dataFirst50: typeof c.data === "string" ? c.data.substring(0, 50) : "not string",
+        keys: Object.keys(c),
       })),
     )
 
@@ -2882,7 +2920,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (cotacoesSlim.length > 0) {
       payload.docs = { cotacoes: cotacoesSlim }
-      console.log("[v0] Enviando cotações no payload.docs.cotacoes:", cotacoesSlim.length)
+      console.log("[v0] payload.docs.cotacoes definido:", {
+        length: payload.docs.cotacoes.length,
+        firstItem: payload.docs.cotacoes[0]
+          ? {
+              name: payload.docs.cotacoes[0].name,
+              hasData: !!payload.docs.cotacoes[0].data,
+              dataType: typeof payload.docs.cotacoes[0].data,
+              dataLength: payload.docs.cotacoes[0].data?.length,
+            }
+          : null,
+      })
     }
 
     if (cotacaoFileNames.length) {
@@ -2894,13 +2942,18 @@ document.addEventListener("DOMContentLoaded", () => {
       payload.cotacoesAvisos = cloneAvisos(row.cotacoes_avisos)
     }
 
-    console.log("[v0] buildPayloadMapa - Payload final:", {
+    console.log("[v0] Payload final antes de enviar:", {
       propostasLen: propostas.length,
       hasDocs: !!payload.docs,
       cotacoesInDocs: payload.docs?.cotacoes?.length || 0,
-      cotacoesFileNames: cotacaoFileNames,
-      cnpj_instituicao: payload.cnpj_instituicao,
-      termo_parceria: payload.termo_parceria,
+      firstCotacaoInPayload: payload.docs?.cotacoes?.[0]
+        ? {
+            name: payload.docs.cotacoes[0].name,
+            hasData: !!payload.docs.cotacoes[0].data,
+            dataType: typeof payload.docs.cotacoes[0].data,
+            keys: Object.keys(payload.docs.cotacoes[0]),
+          }
+        : null,
     })
     console.log("[v0] ========== FIM BUILD PAYLOAD MAPA ==========")
 
