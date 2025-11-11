@@ -2451,6 +2451,9 @@ document.addEventListener("DOMContentLoaded", () => {
       text: S(c.text || ""),
       url: S(c.url || c.link || ""),
       path: S(c.path || ""),
+      savedPath: S(c.savedPath || c.saved_path || ""),
+      data: c.data || c.content || c.buffer || null, // Include PDF content
+      extractedText: S(c.extractedText || c.extracted_text || c.text || ""),
       filename: S(
         c.filename ||
           c.key ||

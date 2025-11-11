@@ -7,9 +7,60 @@ import fileUpload from "express-fileupload"
 
 import fs from "node:fs"
 import fsp from "node:fs/promises"
-import path from "node:path" // Import path module
+import path from "node:path"
 import { dirname, join, extname } from "node:path"
 import { fileURLToPath } from "node:url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+const testDir = join(__dirname, "test", "data")
+const testFile = join(testDir, "05-versions-space.pdf")
+
+try {
+  if (!fs.existsSync(testFile)) {
+    fs.mkdirSync(testDir, { recursive: true })
+    const minimalPDF = `%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+>>
+endobj
+xref
+0 4
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+trailer
+<<
+/Size 4
+/Root 1 0 R
+>>
+startxref
+203
+%%EOF`
+    fs.writeFileSync(testFile, minimalPDF, "utf8")
+    console.log("[server] ✓ Estrutura de teste pdf-parse criada")
+  }
+} catch (err) {
+  console.warn("[server] ⚠️ Não foi possível criar estrutura de teste:", err.message)
+}
 
 import { renderDocxFromTemplate } from "./src/utils/docxTemplate.js" // Imported renderDocxFromTemplate
 import { ensureTemplatesExist } from "./src/autoCreateTemplates.js"
@@ -28,8 +79,8 @@ import { hasOpenAIKey } from "./src/openaiProvider.js"
 import pdfParse from "pdf-parse"
 
 // __dirname helpers (ESM)
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+// const __filename = fileURLToPath(import.meta.url) // REMOVED DUE TO CHANGE ABOVE
+// const __dirname = dirname(__filename) // REMOVED DUE TO CHANGE ABOVE
 const rootDir = __dirname // Define rootDir
 
 // Caminhos úteis
@@ -1114,9 +1165,12 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
       index: idx,
       keys: Object.keys(c || {}),
       hasData: !!c.data,
+      dataType: typeof c.data,
       dataLength: c.data?.length,
+      dataIsBuffer: Buffer.isBuffer(c.data),
       name: c.name || c.filename,
       path: c.path || c.savedPath,
+      extractedText: c.extractedText?.substring(0, 50),
     })),
   )
 
@@ -1131,63 +1185,76 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
   for (let i = 0; i < lista_cotacoes.length; i++) {
     const cotacao = lista_cotacoes[i]
     console.log(`\n[v0] 📄 Processando cotação ${i + 1}/${lista_cotacoes.length}`)
-    console.log(`[v0] Cotação estrutura:`, JSON.stringify(cotacao, null, 2))
+    console.log(`[v0] Cotação nome: ${cotacao.name || cotacao.filename}`)
+    console.log(`[v0] Cotação tem data:`, !!cotacao.data)
+    console.log(`[v0] Cotação data type:`, typeof cotacao.data)
+    console.log(`[v0] Cotação data length:`, cotacao.data?.length)
 
     let textoExtraido = ""
     let estrategiaUsada = "nenhuma"
 
     // ESTRATÉGIA 1: Texto já extraído no frontend
-    if (cotacao.extractedText && typeof cotacao.extractedText === "string") {
+    if (cotacao.extractedText && typeof cotacao.extractedText === "string" && cotacao.extractedText.length > 50) {
       textoExtraido = cotacao.extractedText
       estrategiaUsada = "extractedText pré-extraído"
       console.log(`[v0] ✅ Estratégia 1: ${estrategiaUsada} (${textoExtraido.length} chars)`)
     }
 
-    // ESTRATÉGIA 2: Campo 'data' com conteúdo base64 ou texto
+    // ESTRATÉGIA 2: Campo 'data' com conteúdo base64, buffer, ou texto
     if (!textoExtraido && cotacao.data) {
       console.log(`[v0] 🔄 Tentando Estratégia 2: campo 'data'`)
-      console.log(`[v0] Tipo de data:`, typeof cotacao.data)
-      console.log(`[v0] Data length:`, cotacao.data?.length)
 
       try {
-        const dataStr = String(cotacao.data)
+        let pdfBuffer = null
 
-        // Detecta se é base64 ou texto
-        if (dataStr.startsWith("JVBER") || dataStr.startsWith("%PDF") || dataStr.startsWith("data:")) {
-          console.log(`[v0] Detectado conteúdo base64/PDF no campo data`)
+        // Se já é Buffer
+        if (Buffer.isBuffer(cotacao.data)) {
+          pdfBuffer = cotacao.data
+          console.log(`[v0] Data já é Buffer: ${pdfBuffer.length} bytes`)
+        }
+        // Se é string, pode ser base64 ou texto
+        else if (typeof cotacao.data === "string") {
+          const dataStr = cotacao.data
 
-          // Remove prefixo data:application/pdf;base64, se existir
-          let base64Data = dataStr.replace(/^data:application\/pdf;base64,/, "")
+          // Remove prefixo data: se existir
+          const cleanData = dataStr.replace(/^data:application\/pdf;base64,/, "")
 
-          // Se começa com JVBER (base64 de %PDF), já é base64
-          if (!dataStr.startsWith("data:") && !dataStr.startsWith("%PDF")) {
-            // Já é base64, não precisa converter
+          // Detecta se parece ser base64 (começa com JVBER ou é muito longo sem espaços)
+          const looksLikeBase64 = /^[A-Za-z0-9+/=]+$/.test(cleanData.substring(0, 100)) || cleanData.startsWith("JVBER")
+
+          if (looksLikeBase64) {
+            console.log(`[v0] Detectado conteúdo base64`)
+            pdfBuffer = Buffer.from(cleanData, "base64")
+            console.log(`[v0] PDF buffer criado: ${pdfBuffer.length} bytes`)
           } else if (dataStr.startsWith("%PDF")) {
-            // É texto PDF, converter para base64
-            base64Data = Buffer.from(dataStr).toString("base64")
+            console.log(`[v0] Detectado texto PDF direto`)
+            pdfBuffer = Buffer.from(dataStr)
+            console.log(`[v0] PDF buffer criado: ${pdfBuffer.length} bytes`)
+          } else {
+            // Pode ser texto simples já extraído
+            console.log(`[v0] Detectado texto simples no campo data`)
+            textoExtraido = dataStr
+            estrategiaUsada = "campo data (texto simples)"
+            console.log(`[v0] ✅ Estratégia 2: ${estrategiaUsada} (${textoExtraido.length} chars)`)
           }
+        }
 
-          // Converte base64 para buffer e extrai texto
-          const pdfBuffer = Buffer.from(base64Data, "base64")
-          console.log(`[v0] PDF buffer criado:`, pdfBuffer.length, "bytes")
+        // Se conseguiu criar um buffer, tenta extrair texto do PDF
+        if (pdfBuffer && pdfBuffer.length > 0) {
+          // Verifica magic bytes do PDF
+          const isPDF = pdfBuffer[0] === 0x25 && pdfBuffer[1] === 0x50 && pdfBuffer[2] === 0x44 && pdfBuffer[3] === 0x46
 
-          // Verifica se é realmente um PDF (magic bytes)
-          if (pdfBuffer[0] === 0x25 && pdfBuffer[1] === 0x50 && pdfBuffer[2] === 0x44 && pdfBuffer[3] === 0x46) {
+          if (isPDF) {
             console.log(`[v0] ✅ PDF válido detectado pelos magic bytes`)
-
             const data = await pdfParse(pdfBuffer)
             textoExtraido = data.text || ""
-            estrategiaUsada = "campo data (base64 -> PDF parse)"
+            estrategiaUsada = "campo data (PDF parse)"
             console.log(`[v0] ✅ Estratégia 2: ${estrategiaUsada} (${textoExtraido.length} chars)`)
           } else {
-            console.log(`[v0] ⚠️ Buffer não parece ser um PDF válido (magic bytes não encontrados)`)
+            console.log(
+              `[v0] ⚠️ Buffer não parece ser um PDF válido (magic bytes: ${pdfBuffer[0]}, ${pdfBuffer[1]}, ${pdfBuffer[2]}, ${pdfBuffer[3]})`,
+            )
           }
-        } else {
-          // Pode ser texto simples
-          console.log(`[v0] Detectado texto simples no campo data`)
-          textoExtraido = dataStr
-          estrategiaUsada = "campo data (texto simples)"
-          console.log(`[v0] ✅ Estratégia 2: ${estrategiaUsada} (${textoExtraido.length} chars)`)
         }
       } catch (err) {
         console.log(`[v0] ❌ Erro na Estratégia 2:`, err.message)
@@ -1790,12 +1857,5 @@ function startServer(port = DEFAULT_PORT) {
 
 console.log("[server] ========================================")
 console.log("[server] 📋 Iniciando aplicação...")
-console.log("[server] ========================================")
-console.log("[server] ========================================")
-console.log("[server] 🚀 Iniciando servidor...")
-console.log("[server] ========================================")
-startServer()
-
-console.log("[server] 🚀 Iniciando servidor...")
 console.log("[server] ========================================")
 startServer()
