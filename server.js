@@ -24,6 +24,9 @@ import parseDocsRouter, { extractPurchaseDocData } from "./src/parseDocs.js"
 import vendorsRouter from "./src/vendors.js"
 import { hasOpenAIKey } from "./src/openaiProvider.js"
 
+// Imports para PDF parsing
+import pdfParse from "pdf-parse"
+
 // __dirname helpers (ESM)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -894,7 +897,6 @@ app.use("/api", purchasesRouter) // interno (este arquivo)
 const extractTextFromPDF = async (filePath) => {
   if (!filePath || !fs.existsSync(filePath)) return ""
   try {
-    const pdfParse = (await import("pdf-parse")).default
     const buffer = fs.readFileSync(filePath)
     const data = await pdfParse(buffer)
     return (data?.text || "").replace(/\u0000/g, " ").trim()
@@ -1012,6 +1014,37 @@ const upload = {
   },
 }
 
+// Helper function to format date to DD/MM/YYYY
+const fmtBRDate = (isoDate) => {
+  if (!isoDate) return ""
+  try {
+    const date = new Date(isoDate)
+    if (isNaN(date.getTime())) return ""
+    const day = String(date.getDate()).padStart(2, "0")
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  } catch {
+    return ""
+  }
+}
+
+const normalizePropostas = (propostas = []) => {
+  return propostas.map((p, i) => {
+    const ofertante = toStringSafe(p.ofertante || p.fornecedor || p.nome || `Fornecedor ${i + 1}`)
+    const valor = normalizeMoney(p.valor || p.valor_num || p.total || p.preco)
+
+    return {
+      selecao: p.selecao || `Cotação ${i + 1}`,
+      ofertante: ofertante,
+      cnpj_ofertante: toStringSafe(p.cnpj_ofertante || p.cnpj || p.cpf || p.cnpjCpf),
+      data_cotacao: normalizeDate(p.data_cotacao || p.data || p.dataCotacao || p.dataCotacaoBR),
+      valor: typeof valor === "number" ? valor : "",
+      observacao: toStringSafe(p.observacao || ""),
+    }
+  })
+}
+
 app.post("/api/parse-termo", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
@@ -1068,247 +1101,233 @@ app.post("/api/parse-termo", upload.single("file"), async (req, res) => {
   }
 })
 
-async function extractFromCotacoesWithAI(payload, context = {}) {
-  console.log("[v0] ========================================")
-  console.log("[v0] 🚀 INICIANDO EXTRAÇÃO DE COTAÇÕES")
-  console.log("[v0] ========================================")
+async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
+  console.log("[v0] 🚀 extractFromCotacoesWithAI - INÍCIO")
+  console.log("[v0] Context recebido:", JSON.stringify(context, null, 2))
 
-  const lista_cotacoes = payload?.lista_cotacoes || []
-  console.log(`[v0] Total de cotações recebidas: ${lista_cotacoes.length}`)
-  console.log(`[v0] Payload completo:`, JSON.stringify(payload, null, 2))
+  const lista_cotacoes = Array.isArray(cotacoesData.lista_cotacoes) ? cotacoesData.lista_cotacoes : []
+
+  console.log("[v0] Total de cotações para processar:", lista_cotacoes.length)
+  console.log(
+    "[v0] Estrutura das cotações:",
+    lista_cotacoes.map((c, idx) => ({
+      index: idx,
+      keys: Object.keys(c || {}),
+      hasData: !!c.data,
+      dataLength: c.data?.length,
+      name: c.name || c.filename,
+      path: c.path || c.savedPath,
+    })),
+  )
 
   if (lista_cotacoes.length === 0) {
-    console.log("[v0] ❌ Nenhuma cotação fornecida")
-    return { objeto_cotacao: "", propostas: [] }
+    console.log("[v0] ⚠️ Nenhuma cotação fornecida")
+    return { propostas: [], objeto_cotacao: "" }
   }
 
   const propostas = []
-  const itensEncontrados = []
-  const descricoesProdutos = []
+  const objetosEncontrados = []
 
-  // Processar cada cotação
   for (let i = 0; i < lista_cotacoes.length; i++) {
     const cotacao = lista_cotacoes[i]
-    console.log(`[v0] ========================================`)
-    console.log(`[v0] 📄 COTAÇÃO ${i + 1}/${lista_cotacoes.length}`)
-    console.log(`[v0] ========================================`)
-    console.log(`[v0] Cotação completa:`, JSON.stringify(cotacao, null, 2))
+    console.log(`\n[v0] 📄 Processando cotação ${i + 1}/${lista_cotacoes.length}`)
+    console.log(`[v0] Cotação estrutura:`, JSON.stringify(cotacao, null, 2))
 
     let textoExtraido = ""
-    let metodoExtracao = "nenhum"
+    let estrategiaUsada = "nenhuma"
 
-    // ESTRATÉGIA 1: Texto já extraído
-    if (cotacao.texto && cotacao.texto.length > 50) {
-      textoExtraido = cotacao.texto
-      metodoExtracao = "texto pré-extraído"
-      console.log(`[v0] ✓ ESTRATÉGIA 1 SUCESSO: texto pré-extraído (${textoExtraido.length} caracteres)`)
+    // ESTRATÉGIA 1: Texto já extraído no frontend
+    if (cotacao.extractedText && typeof cotacao.extractedText === "string") {
+      textoExtraido = cotacao.extractedText
+      estrategiaUsada = "extractedText pré-extraído"
+      console.log(`[v0] ✅ Estratégia 1: ${estrategiaUsada} (${textoExtraido.length} chars)`)
     }
-    // ESTRATÉGIA 2: savedPath (caminho salvo no servidor após upload)
-    else if (cotacao.savedPath && fs.existsSync(cotacao.savedPath)) {
-      console.log(`[v0] 🔍 ESTRATÉGIA 2: Tentando ler de savedPath: ${cotacao.savedPath}`)
+
+    // ESTRATÉGIA 2: Campo 'data' com conteúdo base64 ou texto
+    if (!textoExtraido && cotacao.data) {
+      console.log(`[v0] 🔄 Tentando Estratégia 2: campo 'data'`)
+      console.log(`[v0] Tipo de data:`, typeof cotacao.data)
+      console.log(`[v0] Data length:`, cotacao.data?.length)
+
       try {
-        const buffer = fs.readFileSync(cotacao.savedPath)
-        console.log(`[v0] ✓ Arquivo lido: ${buffer.length} bytes`)
+        const dataStr = String(cotacao.data)
 
-        const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
+        // Detecta se é base64 ou texto
+        if (dataStr.startsWith("JVBER") || dataStr.startsWith("%PDF") || dataStr.startsWith("data:")) {
+          console.log(`[v0] Detectado conteúdo base64/PDF no campo data`)
 
-        if (isPDF) {
-          console.log(`[v0] ✓ Detectado como PDF, extraindo texto...`)
-          const pdfParse = (await import("pdf-parse")).default
-          const pdfData = await pdfParse(buffer)
-          textoExtraido = pdfData.text
-          metodoExtracao = "PDF de savedPath"
-          console.log(`[v0] ✓ ESTRATÉGIA 2 SUCESSO: PDF extraído (${textoExtraido.length} caracteres)`)
-        } else {
-          textoExtraido = buffer.toString("utf-8")
-          metodoExtracao = "texto de savedPath"
-          console.log(`[v0] ✓ ESTRATÉGIA 2 SUCESSO: texto UTF-8 (${textoExtraido.length} caracteres)`)
-        }
-      } catch (err) {
-        console.error(`[v0] ✗ ESTRATÉGIA 2 FALHOU:`, err.message)
-      }
-    }
-    // ESTRATÉGIA 3: path (caminho original)
-    else if (cotacao.path && fs.existsSync(cotacao.path)) {
-      console.log(`[v0] 🔍 ESTRATÉGIA 3: Tentando ler de path: ${cotacao.path}`)
-      try {
-        const buffer = fs.readFileSync(cotacao.path)
-        console.log(`[v0] ✓ Arquivo lido: ${buffer.length} bytes`)
+          // Remove prefixo data:application/pdf;base64, se existir
+          let base64Data = dataStr.replace(/^data:application\/pdf;base64,/, "")
 
-        const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
-
-        if (isPDF) {
-          console.log(`[v0] ✓ Detectado como PDF, extraindo texto...`)
-          const pdfParse = (await import("pdf-parse")).default
-          const pdfData = await pdfParse(buffer)
-          textoExtraido = pdfData.text
-          metodoExtracao = "PDF do filesystem"
-          console.log(`[v0] ✓ ESTRATÉGIA 3 SUCESSO: PDF extraído (${textoExtraido.length} caracteres)`)
-        } else {
-          textoExtraido = buffer.toString("utf-8")
-          metodoExtracao = "texto do filesystem"
-          console.log(`[v0] ✓ ESTRATÉGIA 3 SUCESSO: texto UTF-8 (${textoExtraido.length} caracteres)`)
-        }
-      } catch (err) {
-        console.error(`[v0] ✗ ESTRATÉGIA 3 FALHOU:`, err.message)
-      }
-    }
-    // ESTRATÉGIA 4: Base64
-    else if (cotacao.data && typeof cotacao.data === "string" && cotacao.data.length > 100) {
-      console.log(`[v0] 🔍 ESTRATÉGIA 4: Tentando decodificar base64 (${cotacao.data.length} caracteres)...`)
-      try {
-        const base64Data = cotacao.data.includes("base64,") ? cotacao.data.split("base64,")[1] : cotacao.data
-
-        const buffer = Buffer.from(base64Data, "base64")
-        console.log(`[v0] ✓ Buffer decodificado: ${buffer.length} bytes`)
-
-        const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
-
-        if (isPDF) {
-          console.log(`[v0] ✓ Base64 identificado como PDF`)
-          const pdfParse = (await import("pdf-parse")).default
-          const pdfData = await pdfParse(buffer)
-          textoExtraido = pdfData.text
-          metodoExtracao = "PDF de base64"
-          console.log(`[v0] ✓ ESTRATÉGIA 4 SUCESSO: PDF de base64 (${textoExtraido.length} caracteres)`)
-        } else {
-          textoExtraido = buffer.toString("utf-8")
-          metodoExtracao = "texto de base64"
-          console.log(`[v0] ✓ ESTRATÉGIA 4 SUCESSO: texto de base64 (${textoExtraido.length} caracteres)`)
-        }
-      } catch (err) {
-        console.error(`[v0] ✗ ESTRATÉGIA 4 FALHOU:`, err.message)
-      }
-    }
-    // ESTRATÉGIA 5: Buscar no filesystem por nome (última tentativa)
-
-    if (!textoExtraido || textoExtraido.length < 50) {
-      const filename = cotacao.filename || cotacao.name || cotacao.originalname
-      if (filename) {
-        console.log(`[v0] 🔍 ESTRATÉGIA 5: Buscando arquivo por nome: ${filename}`)
-
-        const caminhosPossiveis = [
-          path.join(process.cwd(), "data", "uploads", filename),
-          path.join(process.cwd(), "uploads", filename),
-          path.join(process.cwd(), "data", filename),
-          path.join(__dirname, "data", "uploads", filename),
-          path.join(__dirname, "uploads", filename),
-          path.join(UPLOADS_DIR, filename),
-        ]
-
-        console.log(`[v0] 🔍 Testando ${caminhosPossiveis.length} caminhos possíveis...`)
-
-        for (const caminho of caminhosPossiveis) {
-          if (textoExtraido && textoExtraido.length >= 50) break // Já encontrou
-
-          try {
-            if (fs.existsSync(caminho)) {
-              console.log(`[v0] ✓ Arquivo encontrado em: ${caminho}`)
-              const buffer = fs.readFileSync(caminho)
-              console.log(`[v0] ✓ Buffer lido: ${buffer.length} bytes`)
-
-              const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
-
-              if (isPDF) {
-                console.log(`[v0] ✓ Arquivo identificado como PDF`)
-                const pdfParse = (await import("pdf-parse")).default
-                const pdfData = await pdfParse(buffer)
-                textoExtraido = pdfData.text
-                metodoExtracao = `PDF encontrado em ${caminho}`
-                console.log(`[v0] ✓ ESTRATÉGIA 5 SUCESSO: PDF extraído (${textoExtraido.length} caracteres)`)
-                break
-              } else {
-                textoExtraido = buffer.toString("utf-8")
-                metodoExtracao = `texto encontrado em ${caminho}`
-                console.log(`[v0] ✓ ESTRATÉGIA 5 SUCESSO: texto UTF-8 (${textoExtraido.length} caracteres)`)
-                break
-              }
-            }
-          } catch (err) {
-            console.error(`[v0] ✗ Erro ao tentar ler ${caminho}:`, err.message)
+          // Se começa com JVBER (base64 de %PDF), já é base64
+          if (!dataStr.startsWith("data:") && !dataStr.startsWith("%PDF")) {
+            // Já é base64, não precisa converter
+          } else if (dataStr.startsWith("%PDF")) {
+            // É texto PDF, converter para base64
+            base64Data = Buffer.from(dataStr).toString("base64")
           }
-        }
 
-        if (!textoExtraido || textoExtraido.length < 50) {
-          console.error(`[v0] ❌ TODAS AS ESTRATÉGIAS FALHARAM - nenhum texto extraído`)
+          // Converte base64 para buffer e extrai texto
+          const pdfBuffer = Buffer.from(base64Data, "base64")
+          console.log(`[v0] PDF buffer criado:`, pdfBuffer.length, "bytes")
+
+          // Verifica se é realmente um PDF (magic bytes)
+          if (pdfBuffer[0] === 0x25 && pdfBuffer[1] === 0x50 && pdfBuffer[2] === 0x44 && pdfBuffer[3] === 0x46) {
+            console.log(`[v0] ✅ PDF válido detectado pelos magic bytes`)
+
+            const data = await pdfParse(pdfBuffer)
+            textoExtraido = data.text || ""
+            estrategiaUsada = "campo data (base64 -> PDF parse)"
+            console.log(`[v0] ✅ Estratégia 2: ${estrategiaUsada} (${textoExtraido.length} chars)`)
+          } else {
+            console.log(`[v0] ⚠️ Buffer não parece ser um PDF válido (magic bytes não encontrados)`)
+          }
+        } else {
+          // Pode ser texto simples
+          console.log(`[v0] Detectado texto simples no campo data`)
+          textoExtraido = dataStr
+          estrategiaUsada = "campo data (texto simples)"
+          console.log(`[v0] ✅ Estratégia 2: ${estrategiaUsada} (${textoExtraido.length} chars)`)
         }
-      } else {
-        console.error(`[v0] ❌ Nenhum filename disponível para busca`)
+      } catch (err) {
+        console.log(`[v0] ❌ Erro na Estratégia 2:`, err.message)
       }
     }
 
-    console.log(`[v0] ----------------------------------------`)
-    console.log(`[v0] 📊 RESULTADO DA EXTRAÇÃO:`)
-    console.log(`[v0] Método usado: ${metodoExtracao}`)
-    console.log(`[v0] Texto extraído: ${textoExtraido.length} caracteres`)
-    console.log(`[v0] ----------------------------------------`)
+    // ESTRATÉGIA 3: Caminho savedPath ou path
+    if (!textoExtraido && (cotacao.savedPath || cotacao.path)) {
+      const filePath = cotacao.savedPath || cotacao.path
+      console.log(`[v0] 🔄 Tentando Estratégia 3: savedPath/path = ${filePath}`)
 
-    if (!textoExtraido || textoExtraido.length < 50) {
-      console.log(`[v0] ⚠ Texto insuficiente, criando proposta mínima...`)
+      try {
+        if (fs.existsSync(filePath)) {
+          console.log(`[v0] ✅ Arquivo encontrado: ${filePath}`)
+          const pdfBuffer = fs.readFileSync(filePath)
+          const data = await pdfParse(pdfBuffer)
+          textoExtraido = data.text || ""
+          estrategiaUsada = `savedPath: ${filePath}`
+          console.log(`[v0] ✅ Estratégia 3: ${estrategiaUsada} (${textoExtraido.length} chars)`)
+        } else {
+          console.log(`[v0] ❌ Arquivo não existe: ${filePath}`)
+        }
+      } catch (err) {
+        console.log(`[v0] ❌ Erro na Estratégia 3:`, err.message)
+      }
+    }
+
+    // ESTRATÉGIA 4: Buscar por filename no sistema de arquivos
+    if (!textoExtraido && (cotacao.name || cotacao.filename)) {
+      const filename = cotacao.name || cotacao.filename
+      console.log(`[v0] 🔄 Tentando Estratégia 4: buscar por filename = ${filename}`)
+
+      const searchPaths = [
+        path.join(__dirname, "uploads", filename),
+        path.join(__dirname, "public", "uploads", filename),
+        path.join(__dirname, "..", "uploads", filename),
+        path.join("/tmp", filename),
+      ]
+
+      for (const searchPath of searchPaths) {
+        try {
+          if (fs.existsSync(searchPath)) {
+            console.log(`[v0] ✅ Arquivo encontrado em: ${searchPath}`)
+            const pdfBuffer = fs.readFileSync(searchPath)
+            const data = await pdfParse(pdfBuffer)
+            textoExtraido = data.text || ""
+            estrategiaUsada = `filesystem: ${searchPath}`
+            console.log(`[v0] ✅ Estratégia 4: ${estrategiaUsada} (${textoExtraido.length} chars)`)
+            break
+          }
+        } catch (err) {
+          console.log(`[v0] ❌ Erro ao tentar ${searchPath}:`, err.message)
+        }
+      }
+    }
+
+    // ESTRATÉGIA 5: Usar URL se disponível
+    if (!textoExtraido && cotacao.url) {
+      console.log(`[v0] 🔄 Tentando Estratégia 5: download da URL = ${cotacao.url}`)
+      // TODO: implementar download de URL se necessário
+      console.log(`[v0] ⚠️ Estratégia 5 (URL) não implementada ainda`)
+    }
+
+    // Se não conseguiu extrair texto, pula para próxima
+    if (!textoExtraido || textoExtraido.trim().length < 50) {
+      console.log(`[v0] ⚠️ Texto extraído vazio ou muito curto (${textoExtraido.length} chars)`)
+      console.log(`[v0] ⚠️ Criando proposta vazia para: ${cotacao.name || cotacao.filename || "desconhecido"}`)
+
       propostas.push({
-        selecao: i + 1,
-        ofertante: cotacao.name || cotacao.filename || `Cotação ${i + 1}`,
-        cnpj: "",
+        selecao: `Cotação ${i + 1}`,
+        ofertante: cotacao.name || cotacao.filename || `cotacao.pdf`,
+        cnpj_ofertante: "",
         data_cotacao: "",
         valor: "",
-        observacao: "Não foi possível extrair dados do arquivo",
+        observacao: "Não foi possível extrair dados do PDF",
       })
       continue
     }
 
+    console.log(`[v0] 📊 Texto extraído com sucesso usando: ${estrategiaUsada}`)
+    console.log(`[v0] Primeiros 200 chars:`, textoExtraido.substring(0, 200))
+
+    // Parser manual com regex
     const proposta = {
-      selecao: i + 1,
+      selecao: `Cotação ${i + 1}`,
       ofertante: "",
-      cnpj: "",
+      cnpj_ofertante: "",
       data_cotacao: "",
       valor: "",
       observacao: "",
     }
 
-    // EXTRAÇÃO DE CNPJ
-    console.log(`[v0] 🔍 Extraindo CNPJ...`)
-    const cnpjRegex = /(\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2})/
-    const cnpjMatch = textoExtraido.match(cnpjRegex)
+    // Extração de CNPJ (formato: XX.XXX.XXX/XXXX-XX)
+    const cnpjMatch = textoExtraido.match(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/)
     if (cnpjMatch) {
-      proposta.cnpj = cnpjMatch[1].replace(/[^\d]/g, "")
-      proposta.cnpj = proposta.cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
-      console.log(`[v0] ✓ CNPJ encontrado: ${proposta.cnpj}`)
-    } else {
-      console.log(`[v0] ✗ CNPJ não encontrado`)
+      proposta.cnpj_ofertante = cnpjMatch[0]
+        .replace(/[^\d]/g, "")
+        .replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
+      console.log(`[v0] ✅ CNPJ encontrado: ${proposta.cnpj_ofertante}`)
     }
 
-    // EXTRAÇÃO DO NOME DA EMPRESA
-    console.log(`[v0] 🔍 Extraindo nome da empresa...`)
+    // Extração de nome da empresa (procura por padrões comuns)
     const nomePatterns = [
-      /(?:Razão Social|Empresa|Fornecedor|Proponente)[:\s]*([A-ZÀ-Ú][A-ZÀ-Ú\s&.-]{3,80})/i,
-      /([A-ZÀ-Ú][A-ZÀ-Ú\s&.-]{10,80})\s+(?:CNPJ|CPF)/i,
+      /(?:Razão Social|RAZÃO SOCIAL|Empresa|EMPRESA|Fornecedor|FORNECEDOR)[:\s]+([A-Z][A-Za-z\s&.-]+?)(?:\n|CNPJ|CPF|Endereço)/i,
+      /^([A-Z][A-Z\s&.-]+(?:LTDA|ME|EPP|EIRELI|S\/A|SA))/m,
+      /\n([A-Z][A-Z\s&.-]{10,50}(?:LTDA|ME|EPP|EIRELI))/,
     ]
 
     for (const pattern of nomePatterns) {
       const match = textoExtraido.match(pattern)
       if (match && match[1]) {
         proposta.ofertante = match[1].trim()
-        console.log(`[v0] ✓ Nome encontrado: ${proposta.ofertante}`)
+        console.log(`[v0] ✅ Nome da empresa encontrado: ${proposta.ofertante}`)
         break
       }
     }
 
-    if (!proposta.ofertante) {
-      proposta.ofertante = cotacao.name || cotacao.filename || `Empresa ${i + 1}`
-      console.log(`[v0] ⚠ Nome não encontrado, usando fallback: ${proposta.ofertante}`)
+    // Se não encontrou nome, tenta pegar linha antes do CNPJ
+    if (!proposta.ofertante && cnpjMatch) {
+      const cnpjIndex = textoExtraido.indexOf(cnpjMatch[0])
+      const textoBefore = textoExtraido.substring(Math.max(0, cnpjIndex - 200), cnpjIndex)
+      const linhas = textoBefore.split("\n").filter((l) => l.trim().length > 5)
+      if (linhas.length > 0) {
+        proposta.ofertante = linhas[linhas.length - 1].trim()
+        console.log(`[v0] ✅ Nome inferido (linha antes do CNPJ): ${proposta.ofertante}`)
+      }
     }
 
-    // EXTRAÇÃO DE DATA
-    console.log(`[v0] 🔍 Extraindo data...`)
+    // Extração de data (formatos: DD/MM/YYYY, DD-MM-YYYY, "5 de junho de 2025")
     const dataPatterns = [
-      /(\d{2}[/\-.]\d{2}[/\-.]\d{4})/,
-      /(\d{1,2})\s+de\s+(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i,
+      /\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/,
+      /\b(\d{1,2})\s+de\s+(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})\b/i,
     ]
 
     for (const pattern of dataPatterns) {
       const match = textoExtraido.match(pattern)
       if (match) {
-        if (match[0].includes("de")) {
+        if (match[0].includes("/") || match[0].includes("-")) {
+          proposta.data_cotacao = match[0]
+        } else {
           const meses = {
             janeiro: "01",
             fevereiro: "02",
@@ -1324,163 +1343,101 @@ async function extractFromCotacoesWithAI(payload, context = {}) {
             dezembro: "12",
           }
           const dia = match[1].padStart(2, "0")
-          const mes = meses[match[2].toLowerCase()]
+          const mes = meses[match[2].toLowerCase()] || "01"
           const ano = match[3]
           proposta.data_cotacao = `${dia}/${mes}/${ano}`
-        } else {
-          proposta.data_cotacao = match[1]
         }
-        console.log(`[v0] ✓ Data encontrada: ${proposta.data_cotacao}`)
+        console.log(`[v0] ✅ Data encontrada: ${proposta.data_cotacao}`)
         break
       }
     }
 
-    if (!proposta.data_cotacao) {
-      console.log(`[v0] ✗ Data não encontrada`)
-    }
-
-    // EXTRAÇÃO DE VALOR
-    console.log(`[v0] 🔍 Extraindo valor...`)
-    const valorPatterns = [/(?:Total|Valor Total|Subtotal|Valor)[:\s]*R\$?\s*([\d.,]+)/i, /R\$\s*([\d.,]+)/]
-
-    for (const pattern of valorPatterns) {
-      const matches = textoExtraido.matchAll(new RegExp(pattern, "gi"))
-      const valores = []
-      for (const match of matches) {
-        if (match[1]) {
-          const valor = match[1].replace(/\./g, "").replace(",", ".")
-          const valorNum = Number.parseFloat(valor)
-          if (!isNaN(valorNum) && valorNum > 0) {
-            valores.push(valorNum)
-          }
-        }
-      }
-
-      if (valores.length > 0) {
-        const maiorValor = Math.max(...valores)
-        proposta.valor = `R$ ${maiorValor.toFixed(2).replace(".", ",")}`
-        console.log(`[v0] ✓ Valor encontrado: ${proposta.valor}`)
-        break
-      }
-    }
-
-    if (!proposta.valor) {
-      console.log(`[v0] ✗ Valor não encontrado`)
-    }
-
-    // EXTRAÇÃO DE OBSERVAÇÕES
-    console.log(`[v0] 🔍 Extraindo observações...`)
-    const observacoes = []
-    const obsPatterns = [
-      /(?:Prazo|Entrega)[:\s]*([^\n]{5,100})/i,
-      /(?:Garantia)[:\s]*([^\n]{5,100})/i,
-      /(?:Pagamento|Forma de Pagamento)[:\s]*([^\n]{5,100})/i,
+    // Extração de valor (procura por palavras-chave como "Total", "Valor", etc)
+    const valorPatterns = [
+      /(?:Total|TOTAL|Valor Total|VALOR TOTAL|Subtotal|SUBTOTAL)[:\s]*R?\$?\s*([\d.,]+)/i,
+      /R\$\s*([\d]{1,3}(?:\.\d{3})*,\d{2})/,
+      /(?:^|\n)\s*Total[:\s]*R?\$?\s*([\d.,]+)/im,
     ]
 
+    for (const pattern of valorPatterns) {
+      const match = textoExtraido.match(pattern)
+      if (match && match[1]) {
+        proposta.valor = `R$ ${match[1]}`
+        console.log(`[v0] ✅ Valor encontrado: ${proposta.valor}`)
+        break
+      }
+    }
+
+    // Extração de observações (prazo, garantia, pagamento)
+    const obsPatterns = [
+      /(?:Prazo|PRAZO|Entrega|ENTREGA)[:\s]+([^\n]{10,100})/i,
+      /(?:Garantia|GARANTIA)[:\s]+([^\n]{10,100})/i,
+      /(?:Pagamento|PAGAMENTO|Forma de Pagamento)[:\s]+([^\n]{10,100})/i,
+    ]
+
+    const observacoes = []
     for (const pattern of obsPatterns) {
       const match = textoExtraido.match(pattern)
       if (match && match[1]) {
         observacoes.push(match[1].trim())
-        console.log(`[v0] ✓ Observação encontrada: ${match[1].trim()}`)
       }
     }
+    if (observacoes.length > 0) {
+      proposta.observacao = observacoes.join("; ")
+      console.log(`[v0] ✅ Observações encontradas: ${proposta.observacao}`)
+    }
 
-    proposta.observacao = observacoes.length > 0 ? observacoes.join("; ") : "Conforme proposta anexa"
-
-    // EXTRAÇÃO DE ITENS/PRODUTOS para identificar objeto da cotação
-    console.log(`[v0] 🔍 Extraindo descrição de produtos...`)
-    const itemPatterns = [
-      /(?:Item|Produto|Descrição|Material|Objeto)[:\s]*([^\n]{15,250})/gi,
-      /(?:Especificação|Descrição Técnica)[:\s]*([^\n]{15,250})/gi,
+    // Extração de descrição de produtos (para objeto da cotação)
+    const produtoPatterns = [
+      /(?:Descrição|DESCRIÇÃO|Produto|PRODUTO|Item|ITEM)[:\s]+([^\n]{15,150})/i,
+      /(?:Objeto|OBJETO)[:\s]+([^\n]{15,150})/i,
     ]
 
-    for (const pattern of itemPatterns) {
-      const matches = textoExtraido.matchAll(pattern)
-      for (const match of matches) {
-        if (match[1] && match[1].trim().length > 15) {
-          const item = match[1].trim()
-          itensEncontrados.push(item)
-          descricoesProdutos.push(item)
-          console.log(`[v0] ✓ Item encontrado: ${item}`)
+    for (const pattern of produtoPatterns) {
+      const match = textoExtraido.match(pattern)
+      if (match && match[1]) {
+        const descricao = match[1].trim()
+        if (descricao.length > 10) {
+          objetosEncontrados.push(descricao)
+          console.log(`[v0] ✅ Descrição de produto encontrada: ${descricao}`)
+          break
         }
       }
     }
 
+    // Se não encontrou ofertante, usa o filename
+    if (!proposta.ofertante) {
+      proposta.ofertante = cotacao.name || cotacao.filename || `Fornecedor ${i + 1}`
+      console.log(`[v0] ⚠️ Nome não encontrado, usando: ${proposta.ofertante}`)
+    }
+
+    console.log(`[v0] 📋 Proposta criada:`, JSON.stringify(proposta, null, 2))
     propostas.push(proposta)
-    console.log(`[v0] ========================================`)
-    console.log(`[v0] ✓ PROPOSTA ${i + 1} CRIADA:`)
-    console.log(JSON.stringify(proposta, null, 2))
-    console.log(`[v0] ========================================`)
   }
 
-  console.log(`[v0] ========================================`)
-  console.log(`[v0] 🔍 Identificando objeto da cotação...`)
-  console.log(`[v0] Total de itens encontrados: ${itensEncontrados.length}`)
-  console.log(`[v0] ========================================`)
-
-  let objetoCotacao = ""
-
-  if (descricoesProdutos.length > 0) {
-    // Pega a descrição mais completa e específica
-    objetoCotacao = descricoesProdutos.reduce(
-      (longest, current) => (current.length > longest.length ? current : longest),
-      "",
-    )
-
-    // Remove prefixos comuns que não fazem parte da descrição do produto
-    objetoCotacao = objetoCotacao.replace(/^(Item|Produto|Descrição|Material|Objeto|Especificação)[:\s]*/i, "").trim()
-
-    console.log(`[v0] ✓ Objeto identificado: ${objetoCotacao}`)
-  } else if (context.rubrica) {
-    objetoCotacao = context.rubrica
-    console.log(`[v0] ⚠ Nenhum produto encontrado, usando rubrica: ${objetoCotacao}`)
+  // Determina o objeto da cotação baseado nos objetos encontrados
+  let objeto_cotacao = ""
+  if (objetosEncontrados.length > 0) {
+    // Pega o objeto mais comum ou o primeiro
+    objeto_cotacao = objetosEncontrados[0]
+    console.log(`[v0] 🎯 Objeto da cotação identificado: ${objeto_cotacao}`)
   } else {
-    objetoCotacao = "Material/Serviço conforme cotações anexas"
-    console.log(`[v0] ⚠ Usando descrição genérica`)
+    // Fallback para a rubrica se não encontrou nada
+    objeto_cotacao = context.rubrica || ""
+    console.log(`[v0] ⚠️ Objeto não encontrado, usando rubrica: ${objeto_cotacao}`)
   }
 
-  console.log(`[v0] ========================================`)
-  console.log(`[v0] ✅ EXTRAÇÃO CONCLUÍDA`)
-  console.log(`[v0] Objeto da cotação: ${objetoCotacao || "(vazio)"}`)
-  console.log(`[v0] Total de propostas: ${propostas.length}`)
-  console.log(`[v0] Propostas com CNPJ: ${propostas.filter((p) => p.cnpj).length}`)
-  console.log(`[v0] Propostas com valor: ${propostas.filter((p) => p.valor).length}`)
-  console.log(`[v0] ========================================`)
+  console.log(`[v0] 🏁 extractFromCotacoesWithAI - FIM`)
+  console.log(`[v0] Total de propostas criadas: ${propostas.length}`)
+  console.log(`[v0] Objeto final: ${objeto_cotacao}`)
 
   return {
-    objeto_cotacao: objetoCotacao,
-    propostas: propostas,
+    propostas,
+    objeto_cotacao,
   }
 }
 
-// Helper function to format date to BR format (DD/MM/YYYY)
-const fmtBRDate = (isoString) => {
-  if (!isoString) return ""
-  try {
-    const date = dayjs(isoString)
-    return date.isValid() ? date.format("DD/MM/YYYY") : ""
-  } catch (e) {
-    console.warn(`[fmtBRDate] Invalid date string: ${isoString}`, e)
-    return ""
-  }
-}
-
-// Mock normalizePropostas if it's not defined elsewhere (used in legacy mapa route)
-// Assuming it's meant to normalize the proposals array from the front-end
-function normalizePropostas(proposals = []) {
-  return proposals.map((p) => ({
-    selecao: toStringSafe(p.selecao || `Cotação ${proposals.indexOf(p) + 1}`),
-    ofertante: toStringSafe(p.ofertante || p.fornecedor || p.nome),
-    cnpj_ofertante: toStringSafe(p.cnpj_ofertante || p.cnpj || p.cpf || p.cnpjCpf),
-    cnpj: toStringSafe(p.cnpj || p.cnpj_ofertante || p.cpf || p.cnpjCpf), // Alias
-    data_cotacao: normalizeDate(p.data_cotacao || p.data || p.dataCotacao || p.dataCotacaoBR),
-    data: normalizeDate(p.data || p.data_cotacao || p.dataCotacao || p.dataCotacaoBR), // Alias
-    valor: normalizeMoney(p.valor || p.valorBR || p.total),
-    observacao: toStringSafe(p.observacao || "Conforme proposta anexa"),
-  }))
-}
-
-/* ---- Endpoints diretos (mantidos antes do generateDocsRouter) ---- */
+/* ===== Endpoints diretos (mantidos antes do generateDocsRouter) ---- */
 // FOLHA DE ROSTO
 app.post("/api/generate/folha-rosto", (req, res) => {
   console.log("Payload recebido em folha-rosto.")
