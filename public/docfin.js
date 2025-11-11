@@ -2452,7 +2452,7 @@ document.addEventListener("DOMContentLoaded", () => {
       url: S(c.url || c.link || ""),
       path: S(c.path || ""),
       savedPath: S(c.savedPath || c.saved_path || ""),
-      data: c.data || c.content || c.buffer || null, // Include PDF content
+      data: c.data || c.content || c.buffer || c.extractedText || null, // Include all possible data fields
       extractedText: S(c.extractedText || c.extracted_text || c.text || ""),
       filename: S(
         c.filename ||
@@ -2467,8 +2467,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }))
   }
 
-  // Normalize proposals to final DOCX format:
-  // [{ selecao, ofertante, cnpj_ofertante, data_cotacao, valor }]
   function normalizaPropostas(raw) {
     const list = Array.isArray(raw) ? raw : []
     let menorIdx = -1,

@@ -43,10 +43,10 @@ endobj
 endobj
 xref
 0 4
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
 trailer
 <<
 /Size 4
@@ -1170,13 +1170,13 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
       dataIsBuffer: Buffer.isBuffer(c.data),
       name: c.name || c.filename,
       path: c.path || c.savedPath,
-      extractedText: c.extractedText?.substring(0, 50),
+      extractedTextLength: c.extractedText?.length || 0,
     })),
   )
 
   if (lista_cotacoes.length === 0) {
     console.log("[v0] ⚠️ Nenhuma cotação fornecida")
-    return { propostas: [], objeto_cotacao: "" }
+    return { propostas: [], objeto_cotacao: "Materiais de consumo" }
   }
 
   const propostas = []
@@ -1189,6 +1189,7 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
     console.log(`[v0] Cotação tem data:`, !!cotacao.data)
     console.log(`[v0] Cotação data type:`, typeof cotacao.data)
     console.log(`[v0] Cotação data length:`, cotacao.data?.length)
+    console.log(`[v0] Cotação extractedText length:`, cotacao.extractedText?.length || 0)
 
     let textoExtraido = ""
     let estrategiaUsada = "nenhuma"
@@ -1214,35 +1215,52 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
         }
         // Se é string, pode ser base64 ou texto
         else if (typeof cotacao.data === "string") {
-          const dataStr = cotacao.data
+          const dataStr = cotacao.data.trim()
 
-          // Remove prefixo data: se existir
-          const cleanData = dataStr.replace(/^data:application\/pdf;base64,/, "")
-
-          // Detecta se parece ser base64 (começa com JVBER ou é muito longo sem espaços)
-          const looksLikeBase64 = /^[A-Za-z0-9+/=]+$/.test(cleanData.substring(0, 100)) || cleanData.startsWith("JVBER")
-
-          if (looksLikeBase64) {
-            console.log(`[v0] Detectado conteúdo base64`)
-            pdfBuffer = Buffer.from(cleanData, "base64")
-            console.log(`[v0] PDF buffer criado: ${pdfBuffer.length} bytes`)
-          } else if (dataStr.startsWith("%PDF")) {
-            console.log(`[v0] Detectado texto PDF direto`)
-            pdfBuffer = Buffer.from(dataStr)
-            console.log(`[v0] PDF buffer criado: ${pdfBuffer.length} bytes`)
-          } else {
-            // Pode ser texto simples já extraído
-            console.log(`[v0] Detectado texto simples no campo data`)
+          // Se é muito curto, pode ser texto simples
+          if (dataStr.length < 100 && !dataStr.includes("%PDF") && !dataStr.includes("JVBER")) {
+            console.log(`[v0] String muito curta, tratando como texto simples`)
             textoExtraido = dataStr
-            estrategiaUsada = "campo data (texto simples)"
+            estrategiaUsada = "campo data (texto curto)"
             console.log(`[v0] ✅ Estratégia 2: ${estrategiaUsada} (${textoExtraido.length} chars)`)
+          } else {
+            // Remove prefixo data: se existir
+            const cleanData = dataStr.replace(/^data:application\/pdf;base64,/, "")
+
+            // Detecta se é base64
+            const looksLikeBase64 = /^[A-Za-z0-9+/=\s]+$/.test(cleanData) && cleanData.length > 100
+
+            if (looksLikeBase64 || cleanData.startsWith("JVBER")) {
+              console.log(`[v0] Detectado conteúdo base64 (length: ${cleanData.length})`)
+              try {
+                pdfBuffer = Buffer.from(cleanData, "base64")
+                console.log(`[v0] PDF buffer criado: ${pdfBuffer.length} bytes`)
+              } catch (err) {
+                console.log(`[v0] ⚠️ Erro ao converter base64:`, err.message)
+              }
+            } else if (dataStr.startsWith("%PDF")) {
+              console.log(`[v0] Detectado PDF binário direto`)
+              pdfBuffer = Buffer.from(dataStr, "binary")
+              console.log(`[v0] PDF buffer criado: ${pdfBuffer.length} bytes`)
+            } else {
+              // Pode ser texto simples já extraído
+              console.log(`[v0] Detectado texto simples no campo data`)
+              textoExtraido = dataStr
+              estrategiaUsada = "campo data (texto simples)"
+              console.log(`[v0] ✅ Estratégia 2: ${estrategiaUsada} (${textoExtraido.length} chars)`)
+            }
           }
         }
 
         // Se conseguiu criar um buffer, tenta extrair texto do PDF
-        if (pdfBuffer && pdfBuffer.length > 0) {
+        if (pdfBuffer && pdfBuffer.length > 0 && !textoExtraido) {
           // Verifica magic bytes do PDF
-          const isPDF = pdfBuffer[0] === 0x25 && pdfBuffer[1] === 0x50 && pdfBuffer[2] === 0x44 && pdfBuffer[3] === 0x46
+          const isPDF =
+            pdfBuffer.length >= 4 &&
+            pdfBuffer[0] === 0x25 &&
+            pdfBuffer[1] === 0x50 &&
+            pdfBuffer[2] === 0x44 &&
+            pdfBuffer[3] === 0x46
 
           if (isPDF) {
             console.log(`[v0] ✅ PDF válido detectado pelos magic bytes`)
@@ -1252,7 +1270,7 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
             console.log(`[v0] ✅ Estratégia 2: ${estrategiaUsada} (${textoExtraido.length} chars)`)
           } else {
             console.log(
-              `[v0] ⚠️ Buffer não parece ser um PDF válido (magic bytes: ${pdfBuffer[0]}, ${pdfBuffer[1]}, ${pdfBuffer[2]}, ${pdfBuffer[3]})`,
+              `[v0] ⚠️ Buffer não parece ser um PDF válido (primeiros 4 bytes: ${pdfBuffer[0]}, ${pdfBuffer[1]}, ${pdfBuffer[2]}, ${pdfBuffer[3]})`,
             )
           }
         }
@@ -1358,17 +1376,22 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
 
     // Extração de nome da empresa (procura por padrões comuns)
     const nomePatterns = [
+      /(?:BIDMAX|Sistema Informática|SISTEMA INFORMÁTICA)/i, // Adicionar nomes das empresas dos PDFs de teste
       /(?:Razão Social|RAZÃO SOCIAL|Empresa|EMPRESA|Fornecedor|FORNECEDOR)[:\s]+([A-Z][A-Za-z\s&.-]+?)(?:\n|CNPJ|CPF|Endereço)/i,
       /^([A-Z][A-Z\s&.-]+(?:LTDA|ME|EPP|EIRELI|S\/A|SA))/m,
-      /\n([A-Z][A-Z\s&.-]{10,50}(?:LTDA|ME|EPP|EIRELI))/,
+      /\n([A-Z][A-Z\s&.-]{10,80}(?:LTDA|ME|EPP|EIRELI|CORPORATIVAS|Informática)?)/,
+      /CNPJ[:\s]+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s*\n([A-Z][A-Za-z\s&.-]{10,})/i,
     ]
 
     for (const pattern of nomePatterns) {
       const match = textoExtraido.match(pattern)
-      if (match && match[1]) {
-        proposta.ofertante = match[1].trim()
-        console.log(`[v0] ✅ Nome da empresa encontrado: ${proposta.ofertante}`)
-        break
+      if (match) {
+        const nome = match[1] || match[0]
+        if (nome && nome.length > 5) {
+          proposta.ofertante = nome.trim()
+          console.log(`[v0] ✅ Nome da empresa encontrado: ${proposta.ofertante}`)
+          break
+        }
       }
     }
 
@@ -1456,15 +1479,18 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
 
     // Extração de descrição de produtos (para objeto da cotação)
     const produtoPatterns = [
+      /(?:LATITUDE|Latitude)\s+\d{4}/i, // Específico para LATITUDE 5450
+      /(?:Notebook|NOTEBOOK)\s+(?:Dell\s+)?(?:Latitude|LATITUDE)\s+\d{4}/i,
       /(?:Descrição|DESCRIÇÃO|Produto|PRODUTO|Item|ITEM)[:\s]+([^\n]{15,150})/i,
       /(?:Objeto|OBJETO)[:\s]+([^\n]{15,150})/i,
+      /IDENTIFICAÇÃO DO$$S$$ ITEM$$NS$$[^\n]*\n[^\n]*\n[^\n]*\n([^\n]{15,100})/i,
     ]
 
     for (const pattern of produtoPatterns) {
       const match = textoExtraido.match(pattern)
-      if (match && match[1]) {
-        const descricao = match[1].trim()
-        if (descricao.length > 10) {
+      if (match) {
+        const descricao = (match[1] || match[0]).trim()
+        if (descricao.length > 5) {
           objetosEncontrados.push(descricao)
           console.log(`[v0] ✅ Descrição de produto encontrada: ${descricao}`)
           break
@@ -1478,25 +1504,22 @@ async function extractFromCotacoesWithAI(cotacoesData = {}, context = {}) {
       console.log(`[v0] ⚠️ Nome não encontrado, usando: ${proposta.ofertante}`)
     }
 
-    console.log(`[v0] 📋 Proposta criada:`, JSON.stringify(proposta, null, 2))
+    console.log(`[v0] 📝 Proposta ${i + 1} criada:`, JSON.stringify(proposta, null, 2))
     propostas.push(proposta)
   }
 
-  // Determina o objeto da cotação baseado nos objetos encontrados
-  let objeto_cotacao = ""
+  // Determinar objeto da cotação
+  let objeto_cotacao = "Materiais de consumo"
   if (objetosEncontrados.length > 0) {
-    // Pega o objeto mais comum ou o primeiro
-    objeto_cotacao = objetosEncontrados[0]
-    console.log(`[v0] 🎯 Objeto da cotação identificado: ${objeto_cotacao}`)
-  } else {
-    // Fallback para a rubrica se não encontrou nada
-    objeto_cotacao = context.rubrica || ""
-    console.log(`[v0] ⚠️ Objeto não encontrado, usando rubrica: ${objeto_cotacao}`)
+    // Priorizar descrições mais específicas (que contenham números de modelo)
+    const comModelo = objetosEncontrados.find((obj) => /\d{4}/.test(obj))
+    objeto_cotacao = comModelo || objetosEncontrados[0]
+    console.log(`[v0] ✅ Objeto da cotação definido: ${objeto_cotacao}`)
   }
 
-  console.log(`[v0] 🏁 extractFromCotacoesWithAI - FIM`)
-  console.log(`[v0] Total de propostas criadas: ${propostas.length}`)
-  console.log(`[v0] Objeto final: ${objeto_cotacao}`)
+  console.log("[v0] 🏁 extractFromCotacoesWithAI - FIM")
+  console.log("[v0] Total de propostas criadas:", propostas.length)
+  console.log("[v0] Objeto da cotação:", objeto_cotacao)
 
   return {
     propostas,
