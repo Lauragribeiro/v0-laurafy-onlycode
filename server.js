@@ -22,7 +22,7 @@ dayjs.locale("pt-br")
 import uploadsRouter from "./src/uploads.js"
 import parseDocsRouter, { extractPurchaseDocData } from "./src/parseDocs.js"
 import vendorsRouter from "./src/vendors.js"
-import { ensureOpenAIClient, hasOpenAIKey } from "./src/openaiProvider.js"
+import { hasOpenAIKey } from "./src/openaiProvider.js"
 
 // __dirname helpers (ESM)
 const __filename = fileURLToPath(import.meta.url)
@@ -1071,283 +1071,201 @@ app.post("/api/parse-termo", upload.single("file"), async (req, res) => {
   }
 })
 
-async function extractFromCotacoesWithAI(docs, params = {}) {
-  const { instituicao, codigo_projeto, rubrica } = params
+async function extractFromCotacoesWithAI(input, contexto = {}) {
+  console.log("[v0] ===== EXTRAÇÃO DE COTAÇÕES =====")
+  console.log("[v0] Contexto:", contexto)
 
-  console.log("[v0] extrairCotacoesDeTexto iniciado")
-  console.log("[v0] Parâmetros:", {
-    instituicao,
-    codigo_projeto,
-    rubrica,
-    has_lista_cotacoes: !!docs?.lista_cotacoes,
-    cotacoes_arquivos_count: docs?.lista_cotacoes?.length || 0,
-  })
-
-  const lista_cotacoes = docs?.lista_cotacoes || []
-
-  if (!lista_cotacoes || lista_cotacoes.length === 0) {
-    console.log("[v0] ⚠️ Nenhuma cotação fornecida")
-    return {
-      objeto_cotacao: "Não especificado",
-      propostas: [],
-    }
-  }
-
-  console.log("[v0] ===== INICIANDO LEITURA DOS PDFs =====")
+  const lista_cotacoes = input?.lista_cotacoes || []
   console.log("[v0] Total de cotações a processar:", lista_cotacoes.length)
 
-  const cotacoesTexto = []
+  if (lista_cotacoes.length === 0) {
+    console.log("[v0] Nenhuma cotação fornecida para extração.")
+    return { objeto_cotacao: "", propostas: [] }
+  }
+
+  const propostas = []
 
   for (let i = 0; i < lista_cotacoes.length; i++) {
     const cotacao = lista_cotacoes[i]
-    console.log(`[v0] ===== COTAÇÃO ${i + 1}/${lista_cotacoes.length} =====`)
-    console.log(`[v0] Dados da cotação ${i + 1}:`, {
-      tem_filename: !!cotacao.filename,
-      tem_originalName: !!cotacao.originalName,
-      tem_path: !!cotacao.path,
-      tem_tempPath: !!cotacao.tempPath,
-      tem_data: !!cotacao.data,
-      tem_text: !!cotacao.text,
+    console.log(`[v0] ===== Processando cotação ${i + 1}/${lista_cotacoes.length} =====`)
+    console.log("[v0] Dados da cotação:", {
+      name: cotacao.name,
+      filename: cotacao.filename,
+      texto_length: cotacao.texto?.length || 0,
+      data_length: cotacao.data?.length || 0,
     })
 
     let textoExtraido = ""
 
-    // Estratégia 1: Texto já extraído
-    if (cotacao.text) {
-      textoExtraido = cotacao.text
-      console.log(`[v0] ✓ Cotação ${i + 1}: Usando texto pré-extraído (${textoExtraido.length} chars)`)
+    // Estratégia 1: Texto pré-extraído
+    if (cotacao.texto && cotacao.texto.length > 50) {
+      console.log("[v0] ✓ Usando texto pré-extraído")
+      textoExtraido = cotacao.texto
     }
-    // Estratégia 2: Ler arquivo do filesystem
-    else if (cotacao.path || cotacao.tempPath || cotacao.filename) {
-      const caminhosPossiveis = [
-        cotacao.path,
-        cotacao.tempPath,
-        path.join(__dirname, "data/uploads", cotacao.filename || ""),
-        path.join(__dirname, "uploads", cotacao.filename || ""),
-        path.join(__dirname, cotacao.filename || ""),
-        cotacao.filename,
-      ].filter(Boolean)
-
-      console.log(`[v0] Tentando ler arquivo da cotação ${i + 1} em ${caminhosPossiveis.length} caminhos possíveis...`)
-
-      for (const caminho of caminhosPossiveis) {
-        try {
-          if (fs.existsSync(caminho)) {
-            console.log(`[v0] ✓ Arquivo encontrado: ${caminho}`)
-            const buffer = fs.readFileSync(caminho)
-
-            // Verificar se é PDF
-            const isPDF = buffer.slice(0, 4).toString() === "%PDF"
-            console.log(`[v0] Tipo de arquivo: ${isPDF ? "PDF" : "Outro"}`)
-
-            if (isPDF) {
-              try {
-                const pdfParse = (await import("pdf-parse")).default
-                const pdfData = await pdfParse(buffer)
-                textoExtraido = pdfData.text
-                console.log(`[v0] ✓ PDF extraído com sucesso (${textoExtraido.length} chars)`)
-                break
-              } catch (pdfErr) {
-                console.log(`[v0] ⚠️ Erro ao extrair PDF: ${pdfErr.message}`)
-              }
-            }
-          }
-        } catch (err) {
-          console.log(`[v0] ⚠️ Erro ao ler caminho ${caminho}:`, err.message)
-        }
-      }
-    }
-    // Estratégia 3: Decodificar base64
+    // Estratégia 2: Decodificar base64
     else if (cotacao.data) {
+      console.log("[v0] Tentando decodificar base64...")
       try {
-        console.log(`[v0] Tentando decodificar base64 da cotação ${i + 1}...`)
-        const base64Data = cotacao.data.includes(",") ? cotacao.data.split(",")[1] : cotacao.data
-        const buffer = Buffer.from(base64Data, "base64")
+        const buffer = Buffer.from(cotacao.data, "base64")
+        console.log("[v0] Buffer size:", buffer.length, "bytes")
 
-        const isPDF = buffer.slice(0, 4).toString() === "%PDF"
-        console.log(`[v0] Tipo de arquivo (base64): ${isPDF ? "PDF" : "Outro"}`)
+        // Detecta se é PDF pelos magic bytes
+        const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
+        console.log("[v0] É PDF?", isPDF)
 
         if (isPDF) {
           const pdfParse = (await import("pdf-parse")).default
           const pdfData = await pdfParse(buffer)
           textoExtraido = pdfData.text
-          console.log(`[v0] ✓ PDF base64 extraído com sucesso (${textoExtraido.length} chars)`)
+          console.log("[v0] ✓ Texto extraído do PDF:", textoExtraido.length, "chars")
+        } else {
+          textoExtraido = buffer.toString("utf-8")
+          console.log("[v0] ✓ Texto decodificado:", textoExtraido.length, "chars")
         }
       } catch (err) {
-        console.log(`[v0] ⚠️ Erro ao decodificar base64: ${err.message}`)
+        console.error("[v0] ✗ Erro ao processar base64:", err.message)
+      }
+    }
+    // Estratégia 3: Buscar arquivo no filesystem
+    else if (cotacao.filename || cotacao.name) {
+      const filename = cotacao.filename || cotacao.name
+      console.log("[v0] Tentando ler arquivo:", filename)
+
+      const paths = [
+        path.join(process.cwd(), "data", "uploads", filename),
+        path.join(process.cwd(), "uploads", filename),
+        path.join(process.cwd(), "data", filename),
+      ]
+
+      for (const filePath of paths) {
+        try {
+          if (fs.existsSync(filePath)) {
+            console.log("[v0] ✓ Arquivo encontrado em:", filePath)
+            const buffer = fs.readFileSync(filePath)
+
+            // Detecta se é PDF
+            const isPDF = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
+
+            if (isPDF) {
+              const pdfParse = (await import("pdf-parse")).default
+              const pdfData = await pdfParse(buffer)
+              textoExtraido = pdfData.text
+              console.log("[v0] ✓ Texto extraído do PDF:", textoExtraido.length, "chars")
+            } else {
+              textoExtraido = buffer.toString("utf-8")
+              console.log("[v0] ✓ Texto lido do arquivo:", textoExtraido.length, "chars")
+            }
+            break
+          }
+        } catch (err) {
+          console.error(`[v0] ✗ Erro ao ler ${filePath}:`, err.message)
+        }
       }
     }
 
-    if (textoExtraido) {
-      cotacoesTexto.push({
-        index: i,
-        texto: textoExtraido,
-        nome: cotacao.originalName || cotacao.filename || `Cotação ${i + 1}`,
+    if (!textoExtraido || textoExtraido.length < 50) {
+      console.log("[v0] ✗ Nenhum texto válido extraído desta cotação")
+      propostas.push({
+        selecao: `Cotação ${i + 1}`,
+        ofertante: cotacao.name || cotacao.filename || `Fornecedor ${i + 1}`,
+        cnpj_ofertante: "",
+        data_cotacao: "",
+        valor: "",
+        observacao: "Texto não extraído",
       })
-      console.log(`[v0] ✓ Cotação ${i + 1} adicionada para processamento`)
-    } else {
-      console.log(`[v0] ❌ Cotação ${i + 1}: Não foi possível extrair texto`)
+      continue
     }
+
+    console.log("[v0] Texto extraído (preview):", textoExtraido.substring(0, 300))
+
+    const proposta = {
+      selecao: `Cotação ${i + 1}`,
+      ofertante: cotacao.name || cotacao.filename || `Fornecedor ${i + 1}`,
+      cnpj_ofertante: "",
+      data_cotacao: "",
+      valor: "",
+      observacao: "",
+    }
+
+    // Extrai CNPJ
+    const cnpjMatch = textoExtraido.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/)
+    if (cnpjMatch) {
+      proposta.cnpj_ofertante = cnpjMatch[0]
+        .replace(/[^\d]/g, "")
+        .replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")
+      console.log("[v0] ✓ CNPJ encontrado:", proposta.cnpj_ofertante)
+    }
+
+    // Extrai nome da empresa
+    const empresaPatterns = [
+      /(?:Empresa|Razão Social|Fornecedor|CNPJ)[:\s]+([A-Z][A-ZÀ-Ú\s&-]+)/i,
+      /([A-Z][A-ZÀ-Ú\s&-]{5,50})\s+(?:CNPJ|Endereço|Telefone)/i,
+    ]
+    for (const pattern of empresaPatterns) {
+      const match = textoExtraido.match(pattern)
+      if (match) {
+        proposta.ofertante = match[1].trim()
+        console.log("[v0] ✓ Empresa encontrada:", proposta.ofertante)
+        break
+      }
+    }
+
+    // Extrai data
+    const dataPatterns = [
+      /(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})/,
+      /(\d{1,2})\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i,
+    ]
+    for (const pattern of dataPatterns) {
+      const match = textoExtraido.match(pattern)
+      if (match) {
+        if (match[1] && match[2] && match[3]) {
+          proposta.data_cotacao = `${match[1].padStart(2, "0")}/${match[2].padStart(2, "0")}/${match[3]}`
+        }
+        console.log("[v0] ✓ Data encontrada:", proposta.data_cotacao)
+        break
+      }
+    }
+
+    // Extrai valor total
+    const valorPatterns = [/(?:Total|Valor Total|Subtotal)[:\s]+R?\$?\s*([\d,.]+)/i, /R\$\s*([\d,.]+)/g]
+    let maiorValor = 0
+    for (const pattern of valorPatterns) {
+      const matches = textoExtraido.matchAll(pattern)
+      for (const match of matches) {
+        const valor = Number.parseFloat(match[1].replace(/\./g, "").replace(",", "."))
+        if (valor > maiorValor) {
+          maiorValor = valor
+          proposta.valor = `R$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        }
+      }
+    }
+    if (proposta.valor) {
+      console.log("[v0] ✓ Valor encontrado:", proposta.valor)
+    }
+
+    // Extrai observações
+    const obsPatterns = [/(?:Prazo|Entrega|Garantia|Pagamento)[:\s]+([^\n]{10,100})/i]
+    for (const pattern of obsPatterns) {
+      const match = textoExtraido.match(pattern)
+      if (match) {
+        proposta.observacao = match[1].trim()
+        console.log("[v0] ✓ Observação encontrada:", proposta.observacao)
+        break
+      }
+    }
+
+    if (!proposta.observacao) {
+      proposta.observacao = "Conforme proposta anexa"
+    }
+
+    propostas.push(proposta)
+    console.log(`[v0] ✓ Proposta ${i + 1} criada:`, proposta)
   }
 
-  console.log(`[v0] ===== TOTAL: ${cotacoesTexto.length}/${lista_cotacoes.length} cotações com texto extraído =====`)
-
-  if (cotacoesTexto.length === 0) {
-    console.log("[v0] ❌ Nenhum texto extraído das cotações")
-    return {
-      objeto_cotacao: "Não foi possível extrair informações das cotações",
-      propostas: [],
-    }
-  }
-
-  try {
-    const client = ensureOpenAIClient()
-
-    if (!client) {
-      console.log("[v0] ❌ Cliente OpenAI não disponível. Usando parser básico...")
-      return parseManual(cotacoesTexto)
-    }
-
-    console.log("[v0] ✓ Cliente OpenAI pronto. Enviando para análise...")
-
-    const prompt = `Analise as seguintes cotações e extraia as informações estruturadas:
-
-${cotacoesTexto.map((c, i) => `\n=== COTAÇÃO ${i + 1}: ${c.nome} ===\n${c.texto.substring(0, 3000)}`).join("\n\n")}
-
-INSTRUÇÕES:
-1. Extraia o OBJETO DA COTAÇÃO (o produto/serviço comum em todas as cotações)
-2. Para CADA cotação, extraia:
-   - Empresa ofertante
-   - CNPJ
-   - Data da cotação
-   - Valor total
-   - Observações sobre prazo, garantia, etc.
-
-Retorne um JSON estruturado.`
-
-    const response = await client.chat.completions.create({
-      model: "gpt-4",
-      messages: [{ role: "user", content: prompt }],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "cotacao_mapa",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              objeto_cotacao: { type: "string" },
-              propostas: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    selecao: { type: "string" },
-                    ofertante: { type: "string" },
-                    cnpj: { type: "string" },
-                    data_cotacao: { type: "string" },
-                    valor: { type: "string" },
-                    observacao: { type: "string" },
-                  },
-                  required: ["selecao", "ofertante", "cnpj", "data_cotacao", "valor", "observacao"],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ["objeto_cotacao", "propostas"],
-            additionalProperties: false,
-          },
-        },
-      },
-    })
-
-    const resultado = JSON.parse(response.choices[0].message.content)
-    console.log("[v0] ✓ Extração OpenAI concluída com sucesso!")
-    console.log("[v0] Objeto:", resultado.objeto_cotacao)
-    console.log("[v0] Propostas encontradas:", resultado.propostas.length)
-
-    return resultado
-  } catch (error) {
-    console.log("[v0] ❌ Erro na extração OpenAI:", error.message)
-
-    if (error.status === 401) {
-      console.log("[v0] ❌ Erro 401: Chave OpenAI inválida ou expirada")
-      console.log("[v0] Verifique se a chave no arquivo .env está correta")
-      console.log("[v0] Formato esperado: OPENAI_API_KEY=sk-proj-...")
-    }
-
-    // Fallback para parser manual
-    console.log("[v0] Usando parser manual como fallback...")
-    return parseManual(cotacoesTexto)
-  }
-}
-
-function parseManual(cotacoesTexto) {
-  console.log("[v0] ===== PARSER MANUAL =====")
-
-  const propostas = []
-
-  for (const cotacao of cotacoesTexto) {
-    const texto = cotacao.texto
-
-    // Extrair CNPJ
-    const cnpjMatch = texto.match(/(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/)
-    const cnpj = cnpjMatch ? cnpjMatch[1] : "Não identificado"
-
-    // Extrair empresa (procurar antes do CNPJ ou em linhas com palavras-chave)
-    let empresa = "Empresa não identificada"
-    const empresaMatch = texto.match(
-      /(?:Empresa|Fornecedor|CNPJ|Razão Social)[:\s]*([\w\sÀ-ú.-]+(?:LTDA|S\.A\.|ME|EPP|EI|UNIPESSOAL)?)|([A-Z][\w\sÀ-ú.-]+(?:LTDA|S\.A\.|ME|EPP|EI|UNIPESSOAL))/i,
-    )
-    if (empresaMatch) {
-      empresa = empresaMatch[1] || empresaMatch[2]
-      empresa = empresa.trim().replace(/[\r\n]+/g, " ") // Limpa quebras de linha e espaços extras
-    } else {
-      // Fallback se não encontrar padrões específicos, tenta pegar a primeira linha após "CNPJ:" ou similar
-      const fallbackEmpresaMatch = texto.match(/(?:CNPJ|CNPJ\.?)\s*:\s*[\d.\-/]+\s*[\r\n]+\s*([\w\sÀ-ú.-]+)/i)
-      if (fallbackEmpresaMatch && fallbackEmpresaMatch[1]) empresa = fallbackEmpresaMatch[1].trim()
-    }
-
-    // Extrair data
-    const dataMatch = texto.match(/(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+de\s+\w+\s+de\s+\d{4})/i)
-    const data = dataMatch ? dataMatch[1] : "Não identificada"
-
-    // Extrair valor (procurar por Total, Subtotal, ou maior valor em R$)
-    const valoresMatch = texto.match(/R\$\s*[\d.,]+/g) || []
-    let valor = "R$ 0,00"
-    if (valoresMatch.length > 0) {
-      // Pegar o maior valor encontrado
-      const valores = valoresMatch.map((v) => {
-        const num = v.replace(/[^\d,]/g, "").replace(",", ".")
-        return Number.parseFloat(num)
-      })
-      const maiorValor = Math.max(...valores)
-      valor = `R$ ${maiorValor.toFixed(2).replace(".", ",")}`
-    }
-
-    // Extrair observações
-    let obs = ""
-    if (texto.match(/prazo.*?(\d+\s*dias)/i)) obs += texto.match(/prazo.*?(\d+\s*dias)/i)[0] + ". "
-    if (texto.match(/garantia.*?(\d+\s*anos?)/i)) obs += texto.match(/garantia.*?(\d+\s*anos?)/i)[0] + ". "
-
-    propostas.push({
-      selecao: `Cotação ${cotacao.index + 1}`,
-      ofertante: empresa,
-      cnpj: cnpj,
-      data_cotacao: data,
-      valor: valor,
-      observacao: obs || "Sem observações",
-    })
-
-    console.log(`[v0] ✓ Proposta ${cotacao.index + 1} criada:`, {
-      empresa,
-      cnpj,
-      valor,
-    })
-  }
+  console.log("[v0] ===== FIM EXTRAÇÃO - Total propostas:", propostas.length, "=====")
 
   return {
-    objeto_cotacao: "Aquisição conforme cotações anexas",
+    objeto_cotacao: contexto.rubrica || "",
     propostas,
   }
 }
@@ -1427,215 +1345,207 @@ app.post("/api/generate/folha-rosto", (req, res) => {
 })
 
 // MAPA DE COTAÇÃO
-if (useLegacyMapaRoute) {
-  console.warn("[mapa] LEGACY_MAPA=1 habilitado — utilizando rota legada /api/generate/mapa-cotacao.")
-  app.post("/api/generate/mapa-cotacao", async (req, res) => {
-    console.log("[v0] ========== MAPA DE COTAÇÃO ENDPOINT (LEGACY) ==========")
-    console.log("[v0] Request body keys:", Object.keys(req.body || {}))
+app.post("/api/generate/mapa-cotacao", async (req, res) => {
+  console.log("[v0] ========== MAPA DE COTAÇÃO ENDPOINT ==========")
+  console.log("[v0] Request body keys:", Object.keys(req.body || {}))
 
-    const warnings = []
+  const warnings = []
 
-    try {
-      const b = req.body || {}
-      const isVertex = String(b?.instituicao || "").toUpperCase() === "VERTEX"
-      console.log("[v0] Institution:", isVertex ? "VERTEX" : "EDGE")
+  try {
+    const b = req.body || {}
+    const isVertex = String(b?.instituicao || "").toUpperCase() === "VERTEX"
+    console.log("[v0] Institution:", isVertex ? "VERTEX" : "EDGE")
 
-      const templateName = isVertex ? "mapa/mapa_vertex.docx" : "mapa/mapa_edge.docx"
-      console.log("[v0] Template name:", templateName)
+    const templateName = isVertex ? "mapa/mapa_vertex.docx" : "mapa/mapa_edge.docx"
+    console.log("[v0] Template name:", templateName)
 
-      const rubrica = (
-        b?.processo?.tipo_rubrica ||
-        b?.tipoRubrica ||
-        b?.rubrica ||
-        b?.prestacao ||
-        b?.naturezaDisp ||
-        ""
-      )
-        .toString()
-        .trim()
-      console.log("[v0] Rubrica:", rubrica)
+    const rubrica = (b?.processo?.tipo_rubrica || b?.tipoRubrica || b?.rubrica || b?.prestacao || b?.naturezaDisp || "")
+      .toString()
+      .trim()
+    console.log("[v0] Rubrica:", rubrica)
 
-      // Tenta usar propostas do front se disponíveis, senão tenta extrair
-      let propostas = []
-      let objeto = String(b.objeto || b.objetoDescricao || b.processo?.objeto || "")
-      console.log("[v0] Objeto inicial:", objeto ? objeto : "(empty)")
+    // Tenta usar propostas do front se disponíveis, senão tenta extrair
+    let propostas = []
+    let objeto = String(b.objeto || b.objetoDescricao || b.processo?.objeto || "")
+    console.log("[v0] Objeto inicial:", objeto ? objeto : "(empty)")
 
-      const frontPropsRaw = Array.isArray(b.propostas) ? b.propostas : []
-      console.log("[v0] Front propostas count:", frontPropsRaw.length)
+    const frontPropsRaw = Array.isArray(b.propostas) ? b.propostas : []
+    console.log("[v0] Front propostas count:", frontPropsRaw.length)
 
-      const cotacoesInput =
-        (Array.isArray(b?.docs?.cotacoes) ? b.docs.cotacoes : null) ?? (Array.isArray(b?.cotacoes) ? b.cotacoes : [])
-      console.log("[v0] Cotacoes input count:", cotacoesInput.length)
+    const cotacoesInput =
+      (Array.isArray(b?.docs?.cotacoes) ? b.docs.cotacoes : null) ?? (Array.isArray(b?.cotacoes) ? b.cotacoes : [])
+    console.log("[v0] Cotacoes input count:", cotacoesInput.length)
 
-      // Verifica se temos propostas do front ou cotações para processar
-      if (frontPropsRaw.length > 0) {
-        console.log("[v0] Usando propostas fornecidas pelo front.")
-        propostas = normalizePropostas(frontPropsRaw)
-      } else if (cotacoesInput.length > 0) {
-        console.log("[v0] Tentando extrair dados de", cotacoesInput.length, "cotações...")
-        try {
-          const { objeto_cotacao: extractedObjeto, propostas: extractedPropostas } = await extractFromCotacoesWithAI(
-            { lista_cotacoes: cotacoesInput }, // Passar como objeto com lista_cotacoes
-            {
-              instituicao: b.instituicao || "",
-              rubrica,
-            },
-          )
+    // Verifica se temos propostas do front ou cotações para processar
+    if (frontPropsRaw.length > 0) {
+      console.log("[v0] Usando propostas fornecidas pelo front.")
+      propostas = normalizePropostas(frontPropsRaw)
+    } else if (cotacoesInput.length > 0) {
+      console.log("[v0] Tentando extrair dados de", cotacoesInput.length, "cotações...")
+      try {
+        const { objeto_cotacao: extractedObjeto, propostas: extractedPropostas } = await extractFromCotacoesWithAI(
+          { lista_cotacoes: cotacoesInput },
+          {
+            instituicao: b.instituicao || "",
+            rubrica,
+          },
+        )
 
-          console.log("[v0] Extração concluída:")
-          console.log("[v0] - Objeto extraído:", extractedObjeto || "(vazio)")
-          console.log("[v0] - Propostas extraídas:", extractedPropostas?.length || 0)
+        console.log("[v0] Extração concluída:")
+        console.log("[v0] - Objeto extraído:", extractedObjeto || "(vazio)")
+        console.log("[v0] - Propostas extraídas:", extractedPropostas?.length || 0)
 
-          if (extractedObjeto) objeto = extractedObjeto // Sobrescreve objeto se extraído
+        if (extractedObjeto) objeto = extractedObjeto
 
-          if (extractedPropostas && extractedPropostas.length > 0) {
-            propostas = extractedPropostas
-            console.log("[v0] Usando propostas extraídas da IA/Regex.")
-          } else {
-            console.log("[v0] Nenhuma proposta extraída, criando propostas vazias para cada cotação.")
-            propostas = cotacoesInput.map((cot, idx) => ({
-              selecao: `Cotação ${idx + 1}`,
-              ofertante: cot.name || cot.filename || `Fornecedor ${idx + 1}`,
-              cnpj_ofertante: "",
-              data_cotacao: "",
-              valor: "",
-              observacao: "Dados não extraídos",
-            }))
-            warnings.push(
-              `Criadas ${propostas.length} propostas com dados ausentes. Verifique os arquivos ou insira manualmente.`,
-            )
-          }
-        } catch (extractError) {
-          console.error("[v0] Erro ao extrair cotações:", extractError)
-          warnings.push(`Erro ao processar cotações: ${extractError.message}`)
-
-          if (propostas.length === 0) {
-            console.log("[v0] Criando propostas vazias após erro de extração")
-            propostas = cotacoesInput.map((cot, idx) => ({
-              selecao: `Cotação ${idx + 1}`,
-              ofertante: cot.name || cot.filename || `Fornecedor ${idx + 1}`,
-              cnpj_ofertante: "",
-              data_cotacao: "",
-              valor: "",
-              observacao: "Erro na extração de dados",
-            }))
-          }
-        }
-      }
-
-      // Se não temos propostas nem cotações, cria propostas padrão vazias
-      if (propostas.length === 0) {
-        if (cotacoesInput.length === 0 && frontPropsRaw.length === 0) {
-          warnings.push("Nenhuma cotação ou proposta anexada.")
-          console.log("[v0] Nenhuma cotação anexada, criando 3 propostas vazias padrão")
+        if (extractedPropostas && extractedPropostas.length > 0) {
+          propostas = extractedPropostas
+          console.log("[v0] Usando propostas extraídas.")
         } else {
-          warnings.push("Nenhuma proposta válida identificada.")
-          console.log("[v0] Cotações/Propostas anexadas mas nenhuma proposta válida identificada")
-        }
-
-        propostas = []
-        const MIN_ROWS = 3 // Garante um mínimo de linhas no mapa
-        for (let i = 0; i < MIN_ROWS; i++) {
-          propostas.push({
-            selecao: `Cotação ${i + 1}`,
-            ofertante: "",
+          console.log("[v0] Nenhuma proposta extraída, criando propostas vazias para cada cotação.")
+          propostas = cotacoesInput.map((cot, idx) => ({
+            selecao: `Cotação ${idx + 1}`,
+            ofertante: cot.name || cot.filename || `Fornecedor ${idx + 1}`,
             cnpj_ofertante: "",
             data_cotacao: "",
             valor: "",
-            observacao: "",
-          })
+            observacao: "Dados não extraídos",
+          }))
+          warnings.push(
+            `Criadas ${propostas.length} propostas com dados ausentes. Verifique os arquivos ou insira manualmente.`,
+          )
+        }
+      } catch (extractError) {
+        console.error("[v0] Erro ao extrair cotações:", extractError)
+        warnings.push(`Erro ao processar cotações: ${extractError.message}`)
+
+        if (propostas.length === 0) {
+          console.log("[v0] Criando propostas vazias após erro de extração")
+          propostas = cotacoesInput.map((cot, idx) => ({
+            selecao: `Cotação ${idx + 1}`,
+            ofertante: cot.name || cot.filename || `Fornecedor ${idx + 1}`,
+            cnpj_ofertante: "",
+            data_cotacao: "",
+            valor: "",
+            observacao: "Erro na extração de dados",
+          }))
         }
       }
+    }
 
-      // Garante que o objeto não sobrescreva a rubrica se for idêntico
-      if (objeto.trim().toLowerCase() === rubrica.trim().toLowerCase() && rubrica) {
-        objeto = "" // Limpa o objeto se for igual à rubrica
-      }
-      if (!objeto && rubrica) objeto = rubrica // Usa rubrica como objeto se objeto estiver vazio
-
-      const propsForTemplate = (Array.isArray(propostas) ? propostas : []).map((p, i) => ({
-        selecao: p.selecao || `Cotação ${i + 1}`,
-        ofertante: p.ofertante || p.fornecedor || "",
-        cnpj_ofertante: p.cnpj_ofertante || p.cnpj || p.cpf || p.cnpjCpf || "",
-        cnpj: p.cnpj || p.cnpj_ofertante || p.cpf || p.cnpjCpf || "", // Alias para compatibilidade
-        data_cotacao: p.data_cotacao || p.data || p.dataCotacao || p.dataCotacaoBR || "",
-        data: p.data || p.data_cotacao || p.dataCotacao || p.dataCotacaoBR || "", // Alias para compatibilidade
-        valor: p.valor || p.valorBR || p.total || "",
-        observacao: p.observacao || "Conforme proposta anexa", // Adicionado observacao
-      }))
-
-      console.log("[v0] propsForTemplate count:", propsForTemplate.length)
-
-      const dtPg = b?.processo?.dataPagamentoISO || b?.dataPagamento || ""
-      const baseDate = dtPg ? dayjs(dtPg) : dayjs() // Usa dayjs para manipulação de datas
-      const dia = baseDate.format("DD")
-      const mesNome = baseDate.locale("pt-br").format("MMMM") // Garante o locale pt-br
-      const ano = baseDate.format("YYYY")
-
-      const data = {
-        instituicao: b.instituicao || b.proj?.instituicao || "",
-        cnpj_instituicao: b.cnpj_instituicao || b.proj?.cnpj || "",
-        termo_parceria: b.termo_parceria || b.proj?.termoParceria || "",
-        codigo_projeto: b.codigo_projeto || b.proj?.projetoCodigo || "",
-        projeto: b.projeto || b.proj?.projetoNome || "",
-        projeto_nome: b.projeto || b.proj?.projetoNome || "", // Alias
-        rubrica,
-        natureza_disp: rubrica, // Alias
-        objeto: objeto || rubrica, // Usa rubrica como objeto se objeto estiver vazio
-        propostas: propsForTemplate,
-        data_aquisicao: fmtBRDate(dtPg), // Formata a data de pagamento
-        justificativa: b.justificativa || b.processo?.justificativa || "",
-        localidade: b.localidade || b.extras?.cidade || "Maceió",
-        dia,
-        mes: mesNome,
-        ano,
-        local_data: `${b.localidade || "Maceió"}, ${dia} de ${mesNome} de ${ano}`,
-        coordenador: b.coordenador || b.proj?.coordenador || "",
-        coordenador_nome: b.coordenador || b.proj?.coordenador || "", // Alias
+    // Se não temos propostas nem cotações, cria propostas padrão vazias
+    if (propostas.length === 0) {
+      if (cotacoesInput.length === 0 && frontPropsRaw.length === 0) {
+        warnings.push("Nenhuma cotação ou proposta anexada.")
+        console.log("[v0] Nenhuma cotação anexada, criando 3 propostas vazias padrão")
+      } else {
+        warnings.push("Nenhuma proposta válida identificada.")
+        console.log("[v0] Cotações/Propostas anexadas mas nenhuma proposta válida identificada")
       }
 
-      console.log("[v0] Final data for template:", {
-        instituicao: data.instituicao,
-        propostas_count: data.propostas.length,
-        objeto: data.objeto,
-        warnings_count: warnings.length,
-      })
-
-      if (warnings.length > 0) {
-        console.log("[v0] Mapa generated with warnings:", warnings)
-        return res.json({
-          ok: true,
-          warnings,
-          message: "Mapa gerado com pendências",
-          // Retorna buffer em base64 para o front
-          buffer: Buffer.from(renderDocxFromTemplate(templateName, data, "double")).toString("base64"),
+      propostas = []
+      const MIN_ROWS = 3
+      for (let i = 0; i < MIN_ROWS; i++) {
+        propostas.push({
+          selecao: `Cotação ${i + 1}`,
+          ofertante: "",
+          cnpj_ofertante: "",
+          data_cotacao: "",
+          valor: "",
+          observacao: "",
         })
       }
+    }
 
-      const buffer = renderDocxFromTemplate(templateName, data, "double")
-      res
-        .set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-        .set("Content-Disposition", `attachment; filename="mapa_cotacao_${isVertex ? "vertex" : "edge"}.docx"`)
-        .send(buffer)
-    } catch (err) {
-      console.error("[mapa] erro:", err)
+    // Garante que o objeto não sobrescreva a rubrica se for idêntico
+    if (objeto.trim().toLowerCase() === rubrica.trim().toLowerCase() && rubrica) {
+      objeto = ""
+    }
+    if (!objeto && rubrica) objeto = rubrica
 
-      if (err?.message?.includes("Template não encontrado") || err?.message?.includes("ENOENT")) {
-        return res.status(404).json({
-          ok: false,
-          error: "Template não encontrado. Execute 'npm run generate-templates' para criar os templates.",
-          hint: "Os templates devem estar em src/templates/mapa/",
-        })
-      }
+    const propsForTemplate = (Array.isArray(propostas) ? propostas : []).map((p, i) => ({
+      selecao: p.selecao || `Cotação ${i + 1}`,
+      ofertante: p.ofertante || p.fornecedor || "",
+      cnpj_ofertante: p.cnpj_ofertante || p.cnpj || p.cpf || p.cnpjCpf || "",
+      cnpj: p.cnpj || p.cnpj_ofertante || p.cpf || p.cnpjCpf || "",
+      data_cotacao: p.data_cotacao || p.data || p.dataCotacao || p.dataCotacaoBR || "",
+      data: p.data || p.data_cotacao || p.dataCotacao || p.dataCotacaoBR || "",
+      valor: p.valor || p.valorBR || p.total || "",
+      observacao: p.observacao || "Conforme proposta anexa",
+    }))
 
-      res.status(500).json({
+    console.log("[v0] propsForTemplate count:", propsForTemplate.length)
+
+    const dtPg = b?.processo?.dataPagamentoISO || b?.dataPagamento || ""
+    const baseDate = dtPg ? dayjs(dtPg) : dayjs()
+    const dia = baseDate.format("DD")
+    const mesNome = baseDate.locale("pt-br").format("MMMM")
+    const ano = baseDate.format("YYYY")
+
+    const data = {
+      instituicao: b.instituicao || b.proj?.instituicao || "",
+      cnpj_instituicao: b.cnpj_instituicao || b.proj?.cnpj || "",
+      termo_parceria: b.termo_parceria || b.proj?.termoParceria || "",
+      codigo_projeto: b.codigo_projeto || b.proj?.projetoCodigo || "",
+      projeto: b.projeto || b.proj?.projetoNome || "",
+      projeto_nome: b.projeto || b.proj?.projetoNome || "",
+      rubrica,
+      natureza_disp: rubrica,
+      objeto: objeto || rubrica,
+      propostas: propsForTemplate,
+      data_aquisicao: fmtBRDate(dtPg),
+      justificativa: b.justificativa || b.processo?.justificativa || "",
+      localidade: b.localidade || b.extras?.cidade || "Maceió",
+      dia,
+      mes: mesNome,
+      ano,
+      local_data: `${b.localidade || "Maceió"}, ${dia} de ${mesNome} de ${ano}`,
+      coordenador: b.coordenador || b.proj?.coordenador || "",
+      coordenador_nome: b.coordenador || b.proj?.coordenador || "",
+    }
+
+    console.log("[v0] Final data for template:", {
+      instituicao: data.instituicao,
+      propostas_count: data.propostas.length,
+      objeto: data.objeto,
+      warnings_count: warnings.length,
+    })
+
+    const buffer = renderDocxFromTemplate(templateName, data, "double")
+
+    res
+      .set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+      .set("Content-Disposition", `attachment; filename="mapa_cotacao_${isVertex ? "vertex" : "edge"}.docx"`)
+      .set("X-Warnings", warnings.length > 0 ? JSON.stringify(warnings) : "")
+      .send(buffer)
+
+    if (warnings.length > 0) {
+      console.log("[v0] Mapa generated with warnings:", warnings)
+    }
+  } catch (err) {
+    console.error("[mapa] erro:", err)
+
+    if (err?.message?.includes("Template não encontrado") || err?.message?.includes("ENOENT")) {
+      console.error("[v0] ❌ Template DOCX não encontrado!")
+      console.error("[v0] Execute: npm run generate-templates")
+      console.error("[v0] Ou reinicie o servidor para regenerar templates automaticamente")
+
+      return res.status(404).json({
         ok: false,
-        error: "Erro ao gerar mapa de cotação",
-        details: err?.message || String(err),
+        error: "Rota não encontrada.",
+        details: "Template DOCX não encontrado. Execute 'npm run generate-templates' ou reinicie o servidor.",
+        hint: "Os templates devem estar em src/templates/mapa/",
+        templatePath: err?.path || "desconhecido",
       })
     }
-  })
-}
+    // </CHANGE>
+
+    res.status(500).json({
+      ok: false,
+      error: "Erro ao gerar mapa de cotação",
+      details: err?.message || String(err),
+    })
+  }
+})
 
 /* ===== Páginas ===== */
 app.get("/", (_req, res) => res.sendFile(PUB("index.html")))
@@ -1736,6 +1646,10 @@ console.log("[server] ========================================")
 console.log("[server] 📋 Iniciando aplicação...")
 console.log("[server] ========================================")
 console.log("[server] ========================================")
+console.log("[server] 🚀 Iniciando servidor...")
+console.log("[server] ========================================")
+startServer()
+
 console.log("[server] 🚀 Iniciando servidor...")
 console.log("[server] ========================================")
 startServer()
