@@ -195,47 +195,100 @@ body.login::after {
 
 /* ========================= Loader Global ========================= */
 .loading-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  background: rgba(21, 38, 83, 0.28);
-  backdrop-filter: blur(3px);
-  z-index: 2000;
+  background: rgba(21, 38, 83, 0.5) !important;
+  backdrop-filter: blur(6px) !important;
+  z-index: 2147483647 !important; /* Z-index máximo possível (2^31 - 1) */
   opacity: 0;
   pointer-events: none;
-  transition: opacity .2s ease;
+  transition: opacity 0.3s ease, backdrop-filter 0.3s ease;
+  isolation: isolate !important; /* Criar novo contexto de empilhamento */
 }
 .loading-overlay.is-visible {
-  opacity: 1;
-  pointer-events: auto;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  animation: loading-fade-in 0.3s ease;
+  display: flex !important;
+  visibility: visible !important;
+  z-index: 2147483647 !important; /* Garantir z-index máximo quando visível */
 }
 .loading-overlay[hidden] {
   display: none !important;
 }
+@keyframes loading-fade-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
 .loading-box {
   background: #fff;
   color: var(--color-primary);
-  padding: 22px 28px;
-  border-radius: 16px;
-  box-shadow: 0 18px 44px rgba(21, 38, 83, 0.18);
+  padding: 24px 32px;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(21, 38, 83, 0.25), 0 0 0 1px rgba(21, 38, 83, 0.05);
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-width: 220px;
+  gap: 18px;
+  min-width: 280px;
+  max-width: 400px;
   font-weight: 600;
+  font-size: 15px;
+  animation: loading-box-enter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center;
+}
+@keyframes loading-box-enter {
+  0% {
+    transform: scale(0.8) translateY(10px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+.loading-box p {
+  margin: 0;
+  flex: 1;
+  text-align: left;
+  animation: loading-text-pulse 2s ease-in-out infinite;
+}
+@keyframes loading-text-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 .loading-spinner {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  border: 3px solid rgba(21, 38, 83, 0.2);
+  border: 3.5px solid rgba(21, 38, 83, 0.15);
   border-top-color: var(--color-primary);
-  animation: loading-spin .9s linear infinite;
+  border-right-color: var(--color-primary);
+  animation: loading-spin 0.8s linear infinite;
+  flex-shrink: 0;
 }
 @keyframes loading-spin {
-  to {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
     transform: rotate(360deg);
   }
 }
@@ -648,10 +701,12 @@ LOGIN (escopado em .auth)
   border: none;
   padding: 0;
   background: transparent;
+  z-index: 1000; /* Z-index do modal - menor que o loading overlay (99999) */
 }
 .modal::backdrop {
   background: rgba(7, 12, 34, 0.35);
   backdrop-filter: blur(2px);
+  z-index: 999; /* Backdrop - menor que o loading overlay */
 }
 .modal__card {
   width: min(560px, 92vw);
@@ -948,9 +1003,11 @@ body {
   padding: 0;
   width: min(720px, 92vw);
   box-shadow: 0 24px 64px rgba(16, 24, 40, 0.24);
+  z-index: 1000; /* Z-index do modal - menor que o loading overlay (99999) */
 }
 .modal::backdrop {
   background: rgba(15, 23, 42, 0.45);
+  z-index: 999; /* Backdrop - menor que o loading overlay (99999) */
 }
 .modal__content {
   padding: 18px;
@@ -1170,10 +1227,12 @@ body {
   padding: 0;
   box-shadow: 0 24px 64px rgba(16, 24, 40, 0.24);
   background: #fff;
+  z-index: 1000; /* Z-index do modal - menor que o loading overlay (99999) */
 }
 
 .modal::backdrop {
   background: rgba(15, 23, 42, 0.45);
+  z-index: 999; /* Backdrop - menor que o loading overlay (99999) */
 }
 .modal__content {
   padding: 22px;
@@ -1820,6 +1879,7 @@ dialog.modal {
   border: 0;
   padding: 0;
   max-width: 90vw; /* opcional */
+  z-index: 1000; /* Z-index do modal - menor que o loading overlay */
 }
 
 dialog.modal:not([open]) {
@@ -1828,6 +1888,7 @@ dialog.modal:not([open]) {
 
 dialog.modal::backdrop {
   background: rgba(0, 0, 0, 0.45);
+  z-index: 999; /* Backdrop do modal - menor que o loading overlay (99999) */
 }
 .hidden {
   display: none;

@@ -226,6 +226,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function startGlobalLoading(message) {
     if (!globalLoadingEl) return null
+    
+    // Fechar modais abertos quando o loading começar
+    const pcModal = document.querySelector("#pc-modal")
+    if (pcModal && pcModal.hasAttribute("open")) {
+      if (pcModal.close) pcModal.close()
+      else pcModal.removeAttribute("open")
+      document.body.classList.remove("modal-open")
+    }
+    
+    const zipModal = document.querySelector("#zip-modal")
+    if (zipModal && zipModal.hasAttribute("open")) {
+      if (zipModal.close) zipModal.close()
+      else zipModal.removeAttribute("open")
+    }
+    
     const id = ++loadingSeq
     const label = typeof message === "string" && message.trim() ? message.trim() : "Processando…"
     loadingEntries.set(id, label)
@@ -238,7 +253,65 @@ document.addEventListener("DOMContentLoaded", () => {
     if (id != null && loadingEntries.has(id)) {
       loadingEntries.delete(id)
     }
+    if (loadingEntries.size === 0) {
+      stopAnimatedLoading()
+    }
     renderGlobalLoading()
+  }
+
+  // Mensagens de loading mais detalhadas e animadas
+  const loadingMessages = {
+    "mapa-cotacao": [
+      "📄 Analisando cotações...",
+      "🤖 Processando com IA...",
+      "📊 Extraindo dados dos PDFs...",
+      "✍️ Gerando mapa de cotação...",
+      "✅ Finalizando documento...",
+    ],
+    "generate": [
+      "📝 Preparando documento...",
+      "🔄 Processando dados...",
+      "📄 Gerando arquivo...",
+    ],
+    "parse": [
+      "📄 Lendo arquivo...",
+      "🔍 Extraindo informações...",
+      "✅ Processando dados...",
+    ],
+    "default": [
+      "⏳ Processando...",
+      "🔄 Carregando...",
+    ],
+  }
+
+  let currentMessageIndex = 0
+  let messageInterval = null
+
+  function startAnimatedLoading(messageKey) {
+    const messages = loadingMessages[messageKey] || loadingMessages.default
+    currentMessageIndex = 0
+    
+    if (messageInterval) clearInterval(messageInterval)
+    
+    // Atualizar mensagem imediatamente
+    if (globalLoadingText) {
+      globalLoadingText.textContent = messages[0]
+    }
+    
+    // Rotacionar mensagens a cada 2 segundos
+    messageInterval = setInterval(() => {
+      currentMessageIndex = (currentMessageIndex + 1) % messages.length
+      if (globalLoadingText) {
+        globalLoadingText.textContent = messages[currentMessageIndex]
+      }
+    }, 2000)
+  }
+
+  function stopAnimatedLoading() {
+    if (messageInterval) {
+      clearInterval(messageInterval)
+      messageInterval = null
+    }
   }
 
   function defaultLoadingMessageForFetch(input) {
@@ -249,11 +322,55 @@ document.addEventListener("DOMContentLoaded", () => {
           ? input.url
           : ""
     if (!url) return "Processando…"
-    if (url.includes("/api/generate/mapa-cotacao")) return "Gerando mapa de cotação…"
-    if (url.includes("/api/generate/")) return "Gerando documento…"
-    if (url.includes("/api/purchases")) return "Sincronizando dados…"
-    if (url.includes("/api/parse") || url.includes("/api/extrair")) return "Processando arquivos…"
-    return "Processando…"
+    
+    // Mapa de Cotação (IA) - operação mais demorada
+    if (url.includes("/api/generate/mapa-cotacao")) {
+      startAnimatedLoading("mapa-cotacao")
+      return "📄 Analisando cotações com IA..."
+    }
+    
+    // Geração de documentos
+    if (url.includes("/api/generate/")) {
+      startAnimatedLoading("generate")
+      return "📝 Gerando documento…"
+    }
+    
+    // Parsing e extração (pode usar IA)
+    if (url.includes("/api/parse") || url.includes("/api/extrair")) {
+      startAnimatedLoading("parse")
+      return "📄 Processando arquivos…"
+    }
+    
+    // Uploads de arquivos
+    if (url.includes("/api/upload") || url.includes("/api/uploads")) {
+      return "📤 Enviando arquivo…"
+    }
+    
+    // Purchases
+    if (url.includes("/api/purchases")) {
+      return "🔄 Sincronizando dados…"
+    }
+    
+    // Projetos
+    if (url.includes("/api/projects")) {
+      const method = typeof input === "object" && input.method ? input.method.toUpperCase() : "GET"
+      if (method === "POST" || method === "PATCH" || method === "PUT") {
+        return "💾 Salvando projeto…"
+      }
+      return "📋 Carregando projetos…"
+    }
+    
+    // CNPJ
+    if (url.includes("/api/cnpj")) {
+      return "🔍 Consultando CNPJ…"
+    }
+    
+    // Notificações
+    if (url.includes("/api/notificar")) {
+      return "📧 Enviando notificação…"
+    }
+    
+    return "⏳ Processando…"
   }
 
   if (typeof window !== "undefined" && window.fetch && !window.__docfinFetchWrapped) {
@@ -505,6 +622,9 @@ document.addEventListener("DOMContentLoaded", () => {
       mimetype: f.mimetype || f.type || file.type || "",
       size: typeof f.size === "number" ? f.size : (file.size ?? 0),
       filename: f.filename || f.key || "",
+      path: f.path || f.savedPath || "", // Caminho completo no servidor
+      savedPath: f.savedPath || f.path || "", // Alias para compatibilidade
+      destination: f.destination || "", // Diretório onde foi salvo
     }
   }
 
@@ -758,10 +878,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const files = Array.from(e.target.files || [])
       if (!files.length) return
       try {
-        // 1) Sobe todos
+        console.log(`[upload] 📤 Iniciando upload de ${files.length} arquivo(s) de cotação...`)
+        
+        // 1) Sobe todos e guarda informações completas
         const ups = []
-        for (const f of files) ups.push(await uploadFile(f))
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i]
+          console.log(`[upload] 📤 Upload ${i + 1}/${files.length}: ${f.name}`)
+          const uploaded = await uploadFile(f)
+          ups.push(uploaded)
+          console.log(`[upload] ✅ Upload ${i + 1}/${files.length} concluído:`, {
+            originalname: uploaded.originalname,
+            filename: uploaded.filename,
+            url: uploaded.url,
+            path: uploaded.path || "(vazio)",
+            savedPath: uploaded.savedPath || "(vazio)",
+            destination: uploaded.destination || "(vazio)",
+          })
+        }
         formDocs.cotacoes = ups
+        
+        console.log(`[upload] ✅ Todos os uploads concluídos. Total: ${ups.length} arquivo(s)`)
+        console.log(`[upload] 📋 Arquivos salvos em formDocs.cotacoes:`)
+        ups.forEach((up, idx) => {
+          console.log(`[upload]   ${idx + 1}. ${up.originalname} -> ${up.path || up.url || "(sem path)"}`)
+        })
 
         // 2) UI (lista de links)
         const ul = $(listSel)
@@ -833,13 +974,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const resetPreview = () => {
     if (payPreview) {
       payPreview.src = ""
-      payPreview.hidden = true
+      payPreview.setAttribute("hidden", "true")
+      payPreview.style.display = "none"
+      payPreview.style.visibility = "hidden"
+      payPreview.style.opacity = "0"
     }
   }
   const setImagePreview = (u) => {
-    if (payPreview) {
+    if (payPreview && u) {
       payPreview.src = u
-      payPreview.hidden = false
+      payPreview.removeAttribute("hidden")
+      payPreview.style.display = "block"
+      payPreview.style.visibility = "visible"
+      payPreview.style.opacity = "1"
+      console.log("[docfin] Preview definido:", u.substring(0, 50) + "...")
+    } else {
+      console.warn("[docfin] payPreview não encontrado ou URL vazia")
     }
   }
 
@@ -2463,31 +2613,47 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     // map to fine format
     const mapped = out.map((c) => {
+      // Priorizar originalname para manter o nome real do arquivo
+      const originalname = S(c.originalname || c.name || c.fileName || "")
+      // filename é o nome salvo no servidor (pode ser diferente do originalname)
+      const filename = S(
+        c.filename ||
+          c.key ||
+          (S(c.url || "").startsWith("/uploads/")
+            ? S(c.url || "")
+                .split("/")
+                .pop()
+            : ""),
+      )
+      
+      // Usar originalname como name principal, mas manter filename para busca no servidor
+      const name = originalname || filename || "cotacao.pdf"
+      
       const result = {
-        name: S(c.name || c.filename || c.fileName || "cotacao.pdf"),
+        name: name,
         text: S(c.text || ""),
         url: S(c.url || c.link || ""),
-        path: S(c.path || ""),
-        savedPath: S(c.savedPath || c.saved_path || ""),
+        path: S(c.path || c.savedPath || c.saved_path || ""), // Priorizar path direto
+        savedPath: S(c.savedPath || c.saved_path || c.path || ""), // Alias
         data: c.data || c.content || c.buffer || c.extractedText || null, // Include all possible data fields
         extractedText: S(c.extractedText || c.extracted_text || c.text || ""),
-        filename: S(
-          c.filename ||
-            c.key ||
-            (S(c.url || "").startsWith("/uploads/")
-              ? S(c.url || "")
-                  .split("/")
-                  .pop()
-              : ""),
-        ),
-        originalname: S(c.originalname || c.name || c.fileName || ""),
+        filename: filename || originalname, // Nome do arquivo salvo no servidor
+        originalname: originalname, // Nome original do arquivo
+        destination: S(c.destination || ""), // Diretório onde foi salvo
       }
 
-      console.log("[v0] Mapped cotação:", {
+      console.log("[v0] 📄 Cotação mapeada (DETALHES COMPLETOS):", {
         name: result.name,
+        filename: result.filename,
+        originalname: result.originalname,
+        url: result.url,
+        path: result.path || "(vazio)",
+        savedPath: result.savedPath || "(vazio)",
+        destination: result.destination || "(vazio)",
         hasData: !!result.data,
         dataType: typeof result.data,
         dataLength: result.data?.length,
+        hasExtractedText: !!result.extractedText && result.extractedText.length > 0,
       })
 
       return result
@@ -2868,6 +3034,19 @@ document.addEventListener("DOMContentLoaded", () => {
           "",
       ) || ""
 
+    // Obter nome do usuário logado
+    let usuarioGerador = "Usuário do Sistema"
+    try {
+      const auth = JSON.parse(localStorage.getItem("edge.auth") || "null")
+      if (auth && auth.name) {
+        usuarioGerador = auth.name
+      } else if (auth && auth.email) {
+        usuarioGerador = auth.email.split("@")[0]
+      }
+    } catch (e) {
+      console.warn("[docfin] Não foi possível obter nome do usuário:", e)
+    }
+
     const payload = {
       instituicao: S(proj.instituicao || "EDGE"),
       cnpj_instituicao: S(proj.cnpj || ""),
@@ -2891,6 +3070,8 @@ document.addEventListener("DOMContentLoaded", () => {
       mes,
       ano,
       coordenador: S(proj.coordenador || ""),
+      usuario_gerador: usuarioGerador,
+      usuarioGerador: usuarioGerador,
       filenameHint: `MapaCotacao_${S(proj.codigo || "Projeto")}_${S(row.pcNumero || "")}`,
       objetoDescricao: objetoDesc,
       objeto: objetoDesc,
@@ -2919,18 +3100,38 @@ document.addEventListener("DOMContentLoaded", () => {
     payload.propostas = propostas
 
     if (cotacoesSlim.length > 0) {
-      payload.docs = { cotacoes: cotacoesSlim }
-      console.log("[v0] payload.docs.cotacoes definido:", {
-        length: payload.docs.cotacoes.length,
-        firstItem: payload.docs.cotacoes[0]
-          ? {
-              name: payload.docs.cotacoes[0].name,
-              hasData: !!payload.docs.cotacoes[0].data,
-              dataType: typeof payload.docs.cotacoes[0].data,
-              dataLength: payload.docs.cotacoes[0].data?.length,
-            }
-          : null,
+      // Garantir que todas as informações dos arquivos sejam incluídas no payload
+      payload.docs = { 
+        cotacoes: cotacoesSlim.map(c => ({
+          name: c.name,
+          originalname: c.originalname,
+          filename: c.filename,
+          url: c.url,
+          path: c.path, // Caminho completo no servidor
+          savedPath: c.savedPath, // Alias
+          destination: c.destination, // Diretório
+          text: c.text,
+          extractedText: c.extractedText,
+          data: c.data, // Pode conter buffer/base64
+          mimetype: c.mimetype,
+          size: c.size,
+        }))
+      }
+      console.log("[v0] ════════════════════════════════════════════════════════════")
+      console.log("[v0] 📤 PAYLOAD: Cotações sendo enviadas para o backend:")
+      console.log("[v0] ════════════════════════════════════════════════════════════")
+      payload.docs.cotacoes.forEach((c, idx) => {
+        console.log(`[v0]   ┌─ Cotação ${idx + 1} no payload`)
+        console.log(`[v0]   │  Nome: ${c.name || "(vazio)"}`)
+        console.log(`[v0]   │  Originalname: ${c.originalname || "(vazio)"}`)
+        console.log(`[v0]   │  Filename: ${c.filename || "(vazio)"}`)
+        console.log(`[v0]   │  URL: ${c.url || "(vazio)"}`)
+        console.log(`[v0]   │  Path: ${c.path || "(vazio)"}`)
+        console.log(`[v0]   │  SavedPath: ${c.savedPath || "(vazio)"}`)
+        console.log(`[v0]   │  Destination: ${c.destination || "(vazio)"}`)
+        console.log(`[v0]   └─────────────────────────────────────────`)
       })
+      console.log("[v0] ════════════════════════════════════════════════════════════")
     }
 
     if (cotacaoFileNames.length) {

@@ -58,6 +58,27 @@ router.post("/upload", upload.single("file"), (req, res) => {
   const rel = f.destination.split(path.sep).slice(-2).join("/") + "/" + f.filename; // YYYY/MM/filename
   const url = `/uploads/${rel}`;
 
+  // Caminho completo do arquivo no servidor
+  const fullPath = f.path || path.join(f.destination, f.filename);
+  
+  // Verificar se é uma cotação (nome contém "cotacao" ou "cotação")
+  const isCotacao = /cota[cç][aã]o/i.test(f.originalname || f.filename || "");
+  
+  // Se for cotação, disparar processamento em background (não bloquear resposta)
+  if (isCotacao) {
+    // Processar em background sem bloquear a resposta
+    import("./processCotacaoBackground.js").then(({ processCotacaoBackground }) => {
+      processCotacaoBackground(fullPath, {
+        instituicao: req.body?.instituicao || "EDGE",
+        rubrica: req.body?.rubrica || "",
+      }).catch(err => {
+        console.error(`[upload] Erro no processamento em background:`, err.message);
+      });
+    }).catch(err => {
+      console.error(`[upload] Erro ao importar processCotacaoBackground:`, err.message);
+    });
+  }
+  
   res.json({
     ok: true,
     file: {
@@ -65,7 +86,10 @@ router.post("/upload", upload.single("file"), (req, res) => {
       originalname: f.originalname,
       mimetype: f.mimetype,
       size: f.size,
-      filename: f.filename
+      filename: f.filename,
+      path: fullPath, // Caminho completo no servidor
+      savedPath: fullPath, // Alias para compatibilidade
+      destination: f.destination, // Diretório onde foi salvo
     }
   });
 });

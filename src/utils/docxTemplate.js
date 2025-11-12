@@ -1,220 +1,138 @@
 import PizZip from "pizzip"
-import fs from "node:fs"
-import path from "node:path"
+import Docxtemplater from "docxtemplater"
+import * as fs from "node:fs"
+import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-function nextNonTagVisibleChar(xml, startIndex) {
-  const len = xml.length
-  let insideTag = false
-  for (let i = startIndex; i < len; i += 1) {
-    const ch = xml[i]
-    if (ch === "<") {
-      insideTag = true
-      continue
+/**
+ * Normaliza tags quebradas no XML do Word
+ * O Word quebra tags como {{instituicao}} em múltiplos elementos <w:r><w:t>
+ * Exemplo: <w:r><w:t>{</w:t></w:r><w:r><w:t>{</w:t></w:r><w:r><w:t>instituicao</w:t></w:r><w:r><w:t>}</w:t></w:r><w:r><w:t>}</w:t></w:r>
+ * Esta função junta essas tags quebradas em um único <w:r><w:t>{{instituicao}}</w:t></w:r>
+ */
+function normalizeBrokenTags(xml) {
+  let normalized = xml
+  
+  // O Word quebra tags em múltiplos <w:r><w:t> e pode incluir <w:proofErr>
+  // Exemplos:
+  // 1. <w:r><w:t>{</w:t></w:r><w:r><w:t>{</w:t></w:r><w:proofErr.../><w:r><w:t>instituicao</w:t></w:r><w:proofErr.../><w:r><w:t>}</w:t></w:r><w:r><w:t>}</w:t></w:r>
+  // 2. <w:r><w:t>{{</w:t></w:r><w:proofErr.../><w:r><w:t>termo_parceria</w:t></w:r><w:proofErr.../><w:r><w:t>}}</w:t></w:r>
+  // 3. <w:r><w:t>{</w:t></w:r><w:r><w:t>{</w:t></w:r><w:r><w:t>objeto}}</w:t></w:r>
+  
+  // Primeiro, remover <w:proofErr> que podem estar entre as tags
+  normalized = normalized.replace(/<w:proofErr[^>]*\/>/g, '')
+  normalized = normalized.replace(/<w:proofErr[^>]*>.*?<\/w:proofErr>/g, '')
+  
+  // Caso 1: Tags completamente quebradas: { + { + conteúdo + } + }
+  normalized = normalized.replace(
+    /<w:r[^>]*><w:t[^>]*>\{<\/w:t><\/w:r>\s*<w:r[^>]*><w:t[^>]*>\{<\/w:t><\/w:r>\s*((?:<w:r[^>]*><w:t[^>]*>[^<]*<\/w:t><\/w:r>\s*)*?)<w:r[^>]*><w:t[^>]*>\}<\/w:t><\/w:r>\s*<w:r[^>]*><w:t[^>]*>\}<\/w:t><\/w:r>/g,
+    (match, p1) => {
+      const tagName = p1.replace(/<w:r[^>]*><w:t[^>]*>([^<]*)<\/w:t><\/w:r>/g, '$1').trim()
+      return `<w:r><w:t>{{${tagName}}}</w:t></w:r>`
     }
-    if (insideTag) {
-      if (ch === ">") insideTag = false
-      continue
+  )
+  
+  // Caso 2: Tags parcialmente quebradas: {{ + conteúdo + }}
+  // Exemplo: <w:t>{{</w:t>...<w:t>termo_parceria</w:t>...<w:t>}}</w:t>
+  normalized = normalized.replace(
+    /<w:t[^>]*>\{\{<\/w:t><\/w:r>\s*((?:<w:r[^>]*><w:t[^>]*>[^<]*<\/w:t><\/w:r>\s*)*?)<w:r[^>]*><w:t[^>]*>\}\}<\/w:t>/g,
+    (match, p1) => {
+      const tagName = p1.replace(/<w:r[^>]*><w:t[^>]*>([^<]*)<\/w:t><\/w:r>/g, '$1').trim()
+      return `<w:r><w:t>{{${tagName}}}</w:t></w:r>`
     }
-    if (/\s/.test(ch)) continue
-    return ch
-  }
-  return null
-}
-
-export function sanitizeDocxXml(xml = "") {
-  if (!xml) return ""
-  return xml
-    .replace(/<w:proofErr[^>]*\/>/g, "")
-    .replace(/<w:proofErr[^>]*>.*?<\/w:proofErr>/gs, "")
-    .replace(/\u200b/g, "")
-    .replace(/{{{+/g, "{{")
-    .replace(/}}}+/g, "}}")
-    .replace(/\{\{\s+/g, "{{")
-    .replace(/\s+\}\}/g, "}}")
-    .replace(/\{\s+/g, "{")
-    .replace(/\s+\}/g, "}")
-}
-
-export function normalizeDocxPlaceholders(xml) {
-  if (!xml || typeof xml !== "string" || xml.indexOf("{") === -1) return xml
-
-  const len = xml.length
-  let result = ""
-  let i = 0
-
-  while (i < len) {
-    const ch = xml[i]
-    if (ch === "{") {
-      let raw = ""
-      let openCount = 0
-      let closeCount = 0
-      let j = i
-      let insideTag = false
-
-      while (j < len) {
-        const current = xml[j]
-        raw += current
-
-        if (current === "<") insideTag = true
-        else if (current === ">") insideTag = false
-        else if (!insideTag) {
-          if (current === "{") {
-            openCount += 1
-          } else if (current === "}") {
-            closeCount += 1
-            if (openCount === 1 && closeCount === 1) {
-              const nextVisible = nextNonTagVisibleChar(xml, j + 1)
-              if (nextVisible !== "}") {
-                j += 1
-                break
-              }
-            }
-            if (openCount >= 2 && closeCount >= 2) {
-              j += 1
-              break
-            }
-          }
-        }
-
-        j += 1
-      }
-
-      const isDouble = openCount >= 2 && closeCount >= 2
-      const isSingle = !isDouble && openCount >= 1 && closeCount >= 1
-
-      if (isDouble || isSingle) {
-        const plain = raw.replace(/<[^>]+>/g, "")
-        const sliceStart = isDouble ? 2 : 1
-        const sliceEnd = isDouble ? -2 : -1
-        if (plain.length > Math.abs(sliceEnd) + sliceStart) {
-          const inner = plain.slice(sliceStart, sliceEnd).replace(/\s+/g, " ").trim()
-          if (inner) {
-            result += `{{${inner}}}`
-            i = j
-            continue
-          }
-        }
-      }
+  )
+  
+  // Caso 3: Tags com parte já junta: { + { + conteúdo}}
+  normalized = normalized.replace(
+    /<w:r[^>]*><w:t[^>]*>\{<\/w:t><\/w:r>\s*<w:r[^>]*><w:t[^>]*>\{<\/w:t><\/w:r>\s*((?:<w:r[^>]*><w:t[^>]*>[^<]*<\/w:t><\/w:r>\s*)*?)<w:r[^>]*><w:t[^>]*>\}\}<\/w:t><\/w:r>/g,
+    (match, p1) => {
+      const tagName = p1.replace(/<w:r[^>]*><w:t[^>]*>([^<]*)<\/w:t><\/w:r>/g, '$1').trim()
+      return `<w:r><w:t>{{${tagName}}}</w:t></w:r>`
     }
-
-    result += ch
-    i += 1
-  }
-
-  return result
-}
-
-function normalizeDelimitersOption(delims) {
-  if (!delims) return null
-  if (typeof delims === "string") {
-    const type = delims === "single" ? "single" : "double"
-    return type === "single" ? { start: "{", end: "}", type } : { start: "{{", end: "}}", type }
-  }
-  if (typeof delims === "object" && delims.start && delims.end) {
-    const type = delims.start === "{" && delims.end === "}" ? "single" : "double"
-    return { start: delims.start, end: delims.end, type }
-  }
-  return null
-}
-
-export function detectDocxDelimiters(xml) {
-  if (!xml) return { start: "{{", end: "}}", type: "double" }
-  const hasDouble = /{{[#/A-Za-z0-9_.][^}]*}}/.test(xml)
-  if (hasDouble) return { start: "{{", end: "}}", type: "double" }
-  const hasSingle = /{[#/A-Za-z0-9_.][^}]*}/.test(xml)
-  if (hasSingle) return { start: "{", end: "}", type: "single" }
-  return { start: "{{", end: "}}", type: "double" }
-}
-
-export function convertToDoubleDelimiters(xml, delimiters) {
-  const info = normalizeDelimitersOption(delimiters) || detectDocxDelimiters(xml)
-  if (info.type !== "single") return xml
-  return xml
-    .replace(/\{#([a-zA-Z0-9_.]+)\}/g, "{{#$1}}")
-    .replace(/\{\/([a-zA-Z0-9_.]+)\}/g, "{{/$1}}")
-    .replace(/\{([a-zA-Z0-9_.]+)\}/g, "{{$1}}")
-}
-
-export function escapeXml(value = "") {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-}
-
-function resolvePath(context, key) {
-  if (!key) return undefined
-  if (Object.prototype.hasOwnProperty.call(context, key)) {
-    return context[key]
-  }
-  const parts = key.split(".")
-  let current = context
-  for (const part of parts) {
-    if (current == null) return undefined
-    if (!Object.prototype.hasOwnProperty.call(current, part)) {
-      return undefined
+  )
+  
+  // Caso 4: Tags com parte já junta: {{ + conteúdo + } + }
+  normalized = normalized.replace(
+    /<w:r[^>]*><w:t[^>]*>\{\{<\/w:t><\/w:r>\s*((?:<w:r[^>]*><w:t[^>]*>[^<]*<\/w:t><\/w:r>\s*)*?)<w:r[^>]*><w:t[^>]*>\}<\/w:t><\/w:r>\s*<w:r[^>]*><w:t[^>]*>\}<\/w:t><\/w:r>/g,
+    (match, p1) => {
+      const tagName = p1.replace(/<w:r[^>]*><w:t[^>]*>([^<]*)<\/w:t><\/w:r>/g, '$1').trim()
+      return `<w:r><w:t>{{${tagName}}}</w:t></w:r>`
     }
-    current = current[part]
-  }
-  return current
+  )
+  
+  return normalized
 }
 
-export function applyDocxTemplate(xml, context = {}) {
-  let output = xml
-
-  const loopRegex = /{{#([a-zA-Z0-9_.]+)}}([\s\S]*?){{\/\1}}/g
-  output = output.replace(loopRegex, (match, key, inner) => {
-    const rows = resolvePath(context, key)
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return ""
-    }
-    return rows.map((row) => applyDocxTemplate(inner, { ...context, ...row })).join("")
-  })
-
-  output = output.replace(/{{([a-zA-Z0-9_.]+)}}/g, (match, key) => {
-    const value = resolvePath(context, key)
-    if (value === null || value === undefined) return ""
-    if (typeof value === "number" || typeof value === "bigint") {
-      return escapeXml(String(value))
-    }
-    if (typeof value === "boolean") {
-      return value ? "true" : "false"
-    }
-    return escapeXml(String(value))
-  })
-
-  return output
-}
-
-export function preprocessDocxXml(xml) {
-  return normalizeDocxPlaceholders(sanitizeDocxXml(xml))
-}
-
+/**
+ * Renderiza um documento DOCX a partir de um template buffer e dados
+ * Usa docxtemplater para processar placeholders e loops de forma confiável
+ * Primeiro normaliza tags quebradas pelo Word
+ */
 export function renderDocxBuffer(templateBuffer, data = {}, options = {}) {
-  const zip = new PizZip(templateBuffer)
-  const docXmlPath = options.docXmlPath || "word/document.xml"
-  const entry = zip.file(docXmlPath)
-  if (!entry) {
-    throw new Error(`missing_doc_part:${docXmlPath}`)
+  try {
+    console.log("[docxTemplate] Iniciando renderização com docxtemplater")
+    console.log("[docxTemplate] Propostas:", Array.isArray(data.propostas) ? data.propostas.length : 0)
+    
+    // Carregar o template como binário
+    const zip = new PizZip(templateBuffer)
+    
+    // Normalizar tags quebradas no XML principal
+    const docXml = zip.files["word/document.xml"]
+    if (docXml) {
+      let xmlContent = docXml.asText()
+      xmlContent = normalizeBrokenTags(xmlContent)
+      zip.file("word/document.xml", xmlContent)
+    }
+    
+    // Criar instância do docxtemplater com configurações otimizadas
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      delimiters: {
+        start: "{{",
+        end: "}}",
+      },
+      nullGetter: () => "", // Retornar string vazia para valores null/undefined
+    })
+
+    // Renderizar o template com os dados
+    // O docxtemplater automaticamente processa:
+    // - Placeholders simples: {{instituicao}}
+    // - Loops: {{#propostas}}...{{/propostas}}
+    doc.render(data)
+
+    // Gerar o buffer do documento final
+    const buffer = doc.getZip().generate({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+    })
+
+    console.log("[docxTemplate] Documento gerado com sucesso:", buffer.length, "bytes")
+    return buffer
+  } catch (error) {
+    console.error("[docxTemplate] ❌ Erro ao renderizar template:", error.message)
+    
+    // Log detalhado de erros de tags
+    if (error.properties && error.properties.errors) {
+      console.error("[docxTemplate] Erros de tags encontrados:")
+      error.properties.errors.forEach((err, idx) => {
+        console.error(`[docxTemplate]   ${idx + 1}. ${err.name}: ${err.message}`)
+        if (err.properties && err.properties.context) {
+          console.error(`[docxTemplate]      Contexto: ${err.properties.context.substring(0, 100)}`)
+        }
+      })
+    }
+    
+    throw error
   }
-
-  let xml = preprocessDocxXml(entry.asText())
-  const forced = normalizeDelimitersOption(options.forceDelimiters)
-  const delims = forced || detectDocxDelimiters(xml)
-  xml = convertToDoubleDelimiters(xml, delims)
-  xml = applyDocxTemplate(xml, data)
-  xml = xml.replace(/{{[^}]+}}/g, "")
-
-  zip.file(docXmlPath, xml)
-  return zip.generate({ type: "nodebuffer", compression: "DEFLATE" })
 }
 
+/**
+ * Renderiza um documento DOCX a partir de um arquivo de template
+ */
 export async function renderDocxFromTemplate(templateName, data, mode = "double") {
   const templatePath = path.join(__dirname, "..", "templates", templateName)
 
@@ -224,6 +142,37 @@ export async function renderDocxFromTemplate(templateName, data, mode = "double"
     throw error
   }
 
+  console.log("[docxTemplate] 📄 Carregando template:", templatePath)
+  console.log("[docxTemplate] 📊 Dados para template:", {
+    instituicao: data.instituicao,
+    cnpj_instituicao: data.cnpj_instituicao ? "***" : "(vazio)",
+    termo_parceria: data.termo_parceria ? "***" : "(vazio)",
+    projeto_nome: data.projeto_nome ? "***" : "(vazio)",
+    natureza_disp: data.natureza_disp ? "***" : "(vazio)",
+    objeto: data.objeto ? data.objeto.substring(0, 50) + "..." : "(vazio)",
+    propostas_count: Array.isArray(data.propostas) ? data.propostas.length : 0,
+    data_geracao: data.data_geracao || "(vazio)",
+    usuario_gerador: data.usuario_gerador || "(vazio)",
+  })
+
+  if (Array.isArray(data.propostas) && data.propostas.length > 0) {
+    console.log("[docxTemplate] 📋 Primeira proposta:", {
+      selecao: data.propostas[0].selecao,
+      ofertante: data.propostas[0].ofertante,
+      valor: data.propostas[0].valor,
+    })
+  }
+
   const templateBuffer = fs.readFileSync(templatePath)
   return renderDocxBuffer(templateBuffer, data, mode)
+}
+
+// Funções de compatibilidade (mantidas para não quebrar código existente)
+export function preprocessDocxXml(xml) {
+  return xml
+}
+
+export function applyDocxTemplate(xml, context = {}) {
+  // Esta função não é mais usada, mas mantida para compatibilidade
+  return xml
 }
